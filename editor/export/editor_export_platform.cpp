@@ -344,7 +344,9 @@ Error EditorExportPlatform::_save_pack_file(const Ref<EditorExportPreset> &p_pre
 		
 		if (should_compress) {
 			// Use chunked compression format compatible with FileAccessCompressed
-			const uint32_t block_size = 65536; // 64KB blocks
+			// Get block size from export settings (default 64KB)
+			int block_size_setting = p_preset->get("binary_format/compression_block_size");
+			const uint32_t block_size = (block_size_setting > 0) ? block_size_setting : 65536;
 			const Compression::Mode cmode = Compression::MODE_ZSTD;
 			
 			Vector<uint8_t> compressed_file;

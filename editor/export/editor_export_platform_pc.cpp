@@ -62,6 +62,7 @@ void EditorExportPlatformPC::get_export_options(List<ExportOption> *r_options) c
 
 	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "binary_format/embed_pck"), false));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "binary_format/compress_pck"), false));
+	r_options->push_back(ExportOption(PropertyInfo(Variant::INT, "binary_format/compression_block_size", PROPERTY_HINT_RANGE, "4096,262144,4096"), 65536));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "binary_format/compression_include_filters"), "*.res,*.scn,*.tscn,*.tres"));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "binary_format/compression_exclude_filters"), ""));
 
