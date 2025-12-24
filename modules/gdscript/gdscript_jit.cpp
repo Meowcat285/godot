@@ -53,8 +53,6 @@ void GDScriptJIT::_check_platform_support() {
 	// - Operating system (Windows, Linux, macOS, etc.)
 	// - Memory protection capabilities (W^X, etc.)
 
-	String arch = Engine::get_singleton()->get_architecture_name();
-
 	// For now, mark JIT as available on common desktop platforms
 	// This is placeholder logic - actual implementation would verify
 	// that the JIT backend can generate code for this platform.
@@ -178,9 +176,7 @@ bool GDScriptJIT::request_compile(GDScriptFunction *p_function) {
 	if (it == compiled_functions.end()) {
 		return false;
 	}
-
 	JITFunctionInfo &info = it->value;
-
 	if (info.status == STATUS_COMPILED || info.status == STATUS_PENDING) {
 		return info.status == STATUS_COMPILED;
 	}
