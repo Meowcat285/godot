@@ -31,6 +31,7 @@
 #include "pck_packer.h"
 
 #include "core/crypto/crypto_core.h"
+#include "core/io/compression.h"
 #include "core/io/file_access.h"
 #include "core/io/file_access_encrypted.h"
 #include "core/io/file_access_pack.h" // PACK_HEADER_MAGIC, PACK_FORMAT_VERSION
@@ -48,7 +49,7 @@ static int _get_pad(int p_alignment, int p_n) {
 
 void PCKPacker::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("pck_start", "pck_path", "alignment", "key", "encrypt_directory"), &PCKPacker::pck_start, DEFVAL(32), DEFVAL("0000000000000000000000000000000000000000000000000000000000000000"), DEFVAL(false));
-	ClassDB::bind_method(D_METHOD("add_file", "target_path", "source_path", "encrypt"), &PCKPacker::add_file, DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("add_file", "target_path", "source_path", "encrypt", "compress"), &PCKPacker::add_file, DEFVAL(false), DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("add_file_removal", "target_path"), &PCKPacker::add_file_removal);
 	ClassDB::bind_method(D_METHOD("flush", "verbose"), &PCKPacker::flush, DEFVAL(false));
 }
@@ -145,7 +146,7 @@ Error PCKPacker::add_file_removal(const String &p_target_path) {
 	return OK;
 }
 
-Error PCKPacker::add_file(const String &p_target_path, const String &p_source_path, bool p_encrypt) {
+Error PCKPacker::add_file(const String &p_target_path, const String &p_source_path, bool p_encrypt, bool p_compress) {
 	ERR_FAIL_COND_V_MSG(file.is_null(), ERR_INVALID_PARAMETER, "File must be opened before use.");
 
 	Ref<FileAccess> f = FileAccess::open(p_source_path, FileAccess::READ);
@@ -159,9 +160,12 @@ Error PCKPacker::add_file(const String &p_target_path, const String &p_source_pa
 	pf.path = p_target_path.simplify_path().trim_prefix("res://");
 	pf.src_path = p_source_path;
 	pf.ofs = file->get_position();
-	pf.size = f->get_length();
+	pf.uncompressed_size = f->get_length();
+	pf.compressed = p_compress;
 
 	Vector<uint8_t> data = FileAccess::get_file_as_bytes(p_source_path);
+	
+	// Compute MD5 of original (uncompressed) data
 	{
 		unsigned char hash[16];
 		CryptoCore::md5(data.ptr(), data.size(), hash);
@@ -170,10 +174,12 @@ Error PCKPacker::add_file(const String &p_target_path, const String &p_source_pa
 			pf.md5.write[i] = hash[i];
 		}
 	}
+	
 	pf.encrypted = p_encrypt;
 
 	Ref<FileAccess> ftmp = file;
 
+	// Handle encryption wrapper if needed
 	Ref<FileAccessEncrypted> fae;
 	if (p_encrypt) {
 		fae.instantiate();
@@ -184,7 +190,69 @@ Error PCKPacker::add_file(const String &p_target_path, const String &p_source_pa
 		ftmp = fae;
 	}
 
-	ftmp->store_buffer(data);
+	// Write compressed or uncompressed data
+	if (p_compress) {
+		// Use chunked compression format compatible with FileAccessCompressed
+		const uint32_t block_size = 65536; // 64KB blocks
+		const Compression::Mode cmode = Compression::MODE_ZSTD;
+		
+		// Write compressed file header
+		CharString magic_str = String("PCMP").utf8();
+		ftmp->store_buffer((const uint8_t *)magic_str.get_data(), 4); // Magic
+		ftmp->store_32(cmode); // Compression mode
+		ftmp->store_32(block_size); // Block size
+		ftmp->store_32(uint32_t(data.size())); // Uncompressed size
+		
+		uint32_t block_count = (data.size() / block_size) + 1;
+		uint64_t block_table_pos = ftmp->get_position();
+		
+		// Reserve space for block size table
+		for (uint32_t i = 0; i < block_count; i++) {
+			ftmp->store_32(0);
+		}
+		
+		uint32_t last_block_size = data.size() % block_size;
+		if (last_block_size == 0 && data.size() > 0) {
+			last_block_size = block_size;
+			block_count = data.size() / block_size;
+		}
+		
+		// Compress and write blocks
+		Vector<uint32_t> block_sizes;
+		block_sizes.resize(block_count);
+		
+		int64_t max_compressed_size = Compression::get_max_compressed_buffer_size(block_size, cmode);
+		Vector<uint8_t> compressed_block;
+		compressed_block.resize(max_compressed_size);
+		
+		for (uint32_t i = 0; i < block_count; i++) {
+			uint32_t bl = (i == block_count - 1 && last_block_size > 0) ? last_block_size : block_size;
+			const uint8_t *bp = data.ptr() + (i * block_size);
+			
+			int64_t compressed_size = Compression::compress(compressed_block.ptrw(), bp, bl, cmode);
+			ERR_FAIL_COND_V_MSG(compressed_size < 0, ERR_CANT_CREATE, "Error compressing data block.");
+			
+			ftmp->store_buffer(compressed_block.ptr(), compressed_size);
+			block_sizes.write[i] = compressed_size;
+		}
+		
+		// Write magic at the end
+		ftmp->store_buffer((const uint8_t *)magic_str.get_data(), 4);
+		
+		// Go back and write block sizes
+		uint64_t end_pos = ftmp->get_position();
+		ftmp->seek(block_table_pos);
+		for (uint32_t i = 0; i < block_count; i++) {
+			ftmp->store_32(block_sizes[i]);
+		}
+		ftmp->seek(end_pos);
+		
+		pf.size = end_pos - pf.ofs;
+	} else {
+		// Write uncompressed data
+		ftmp->store_buffer(data);
+		pf.size = data.size();
+	}
 
 	if (fae.is_valid()) {
 		ftmp.unref();
@@ -253,7 +321,14 @@ Error PCKPacker::flush(bool p_verbose) {
 		if (files[i].removal) {
 			flags |= PACK_FILE_REMOVAL;
 		}
+		if (files[i].compressed) {
+			flags |= PACK_FILE_COMPRESSED;
+		}
 		fhead->store_32(flags);
+
+		if (files[i].compressed) {
+			fhead->store_64(files[i].uncompressed_size);
+		}
 
 		if (p_verbose) {
 			print_line(vformat("[%d/%d - %d%%] PCKPacker flush: %s -> %s", i, file_num, float(i) / file_num * 100, files[i].src_path, files[i].path));
