@@ -84,6 +84,8 @@ public:
 		bool encrypted = false;
 		bool removal = false;
 		bool delta = false;
+		bool compressed = false;
+		uint64_t uncompressed_size = 0;
 		Vector<uint8_t> md5;
 		CharString path_utf8;
 

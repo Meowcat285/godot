@@ -30,6 +30,8 @@
 
 #include "file_access_pack.h"
 
+#include "core/io/compression.h"
+#include "core/io/file_access_compressed.h"
 #include "core/io/file_access_encrypted.h"
 #include "core/io/file_access_patched.h"
 #include "core/object/script_language.h"
@@ -46,7 +48,7 @@ Error PackedData::add_pack(const String &p_path, bool p_replace_files, uint64_t 
 	return ERR_FILE_UNRECOGNIZED;
 }
 
-void PackedData::add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted, bool p_bundle, bool p_delta) {
+void PackedData::add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted, bool p_bundle, bool p_delta, bool p_compressed, uint64_t p_uncompressed_size) {
 	String simplified_path = p_path.simplify_path().trim_prefix("res://");
 	PathMD5 pmd5(simplified_path.md5_buffer());
 
@@ -56,6 +58,8 @@ void PackedData::add_path(const String &p_pkg_path, const String &p_path, uint64
 	pf.encrypted = p_encrypted;
 	pf.bundle = p_bundle;
 	pf.delta = p_delta;
+	pf.compressed = p_compressed;
+	pf.uncompressed_size = p_uncompressed_size;
 	pf.pack = p_pkg_path;
 	pf.offset = p_ofs;
 	pf.size = p_size;
@@ -347,10 +351,15 @@ bool PackedSourcePCK::try_open_pack(const String &p_path, bool p_replace_files, 
 		f->get_buffer(md5, 16);
 		uint32_t flags = f->get_32();
 
+		uint64_t uncompressed_size = 0;
+		if (flags & PACK_FILE_COMPRESSED) {
+			uncompressed_size = f->get_64();
+		}
+
 		if (flags & PACK_FILE_REMOVAL) { // The file was removed.
 			PackedData::get_singleton()->remove_path(path);
 		} else {
-			PackedData::get_singleton()->add_path(p_path, path, file_base + ofs, size, md5, this, p_replace_files, (flags & PACK_FILE_ENCRYPTED), sparse_bundle, (flags & PACK_FILE_DELTA));
+			PackedData::get_singleton()->add_path(p_path, path, file_base + ofs, size, md5, this, p_replace_files, (flags & PACK_FILE_ENCRYPTED), sparse_bundle, (flags & PACK_FILE_DELTA), (flags & PACK_FILE_COMPRESSED), uncompressed_size);
 		}
 	}
 
@@ -358,7 +367,13 @@ bool PackedSourcePCK::try_open_pack(const String &p_path, bool p_replace_files, 
 }
 
 Ref<FileAccess> PackedSourcePCK::get_file(const String &p_path, PackedData::PackedFile *p_file) {
-	Ref<FileAccess> file(memnew(FileAccessPack(p_path, *p_file)));
+	Ref<FileAccess> file;
+	
+	if (p_file->compressed) {
+		file = Ref<FileAccess>(memnew(FileAccessPackCompressed(p_path, *p_file)));
+	} else {
+		file = Ref<FileAccess>(memnew(FileAccessPack(p_path, *p_file)));
+	}
 
 	if (PackedData::get_singleton()->has_delta_patches(p_path)) {
 		Ref<FileAccessPatched> file_patched;
@@ -540,6 +555,139 @@ FileAccessPack::FileAccessPack(const String &p_path, const PackedData::PackedFil
 	}
 	pos = 0;
 	eof = false;
+}
+
+//////////////////////////////////////////////////////////////////
+
+Error FileAccessPackCompressed::open_internal(const String &p_path, int p_mode_flags) {
+	ERR_PRINT("Can't open pack-referenced file.");
+	return ERR_UNAVAILABLE;
+}
+
+bool FileAccessPackCompressed::is_open() const {
+	return compressed_file.is_valid() && compressed_file->is_open();
+}
+
+void FileAccessPackCompressed::seek(uint64_t p_position) {
+	ERR_FAIL_COND_MSG(compressed_file.is_null(), "File must be opened before use.");
+	compressed_file->seek(p_position);
+	pos = p_position;
+	eof = compressed_file->eof_reached();
+}
+
+void FileAccessPackCompressed::seek_end(int64_t p_position) {
+	ERR_FAIL_COND_MSG(compressed_file.is_null(), "File must be opened before use.");
+	compressed_file->seek_end(p_position);
+	pos = compressed_file->get_position();
+	eof = compressed_file->eof_reached();
+}
+
+uint64_t FileAccessPackCompressed::get_position() const {
+	if (compressed_file.is_valid()) {
+		return compressed_file->get_position();
+	}
+	return pos;
+}
+
+uint64_t FileAccessPackCompressed::get_length() const {
+	if (compressed_file.is_valid()) {
+		return compressed_file->get_length();
+	}
+	return pf.uncompressed_size;
+}
+
+bool FileAccessPackCompressed::eof_reached() const {
+	if (compressed_file.is_valid()) {
+		return compressed_file->eof_reached();
+	}
+	return eof;
+}
+
+uint64_t FileAccessPackCompressed::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
+	ERR_FAIL_COND_V_MSG(compressed_file.is_null(), -1, "File must be opened before use.");
+	uint64_t read = compressed_file->get_buffer(p_dst, p_length);
+	pos = compressed_file->get_position();
+	eof = compressed_file->eof_reached();
+	return read;
+}
+
+void FileAccessPackCompressed::set_big_endian(bool p_big_endian) {
+	ERR_FAIL_COND_MSG(compressed_file.is_null(), "File must be opened before use.");
+	FileAccess::set_big_endian(p_big_endian);
+	compressed_file->set_big_endian(p_big_endian);
+}
+
+Error FileAccessPackCompressed::get_error() const {
+	if (compressed_file.is_valid()) {
+		return compressed_file->get_error();
+	}
+	if (eof) {
+		return ERR_FILE_EOF;
+	}
+	return OK;
+}
+
+void FileAccessPackCompressed::flush() {
+	ERR_FAIL();
+}
+
+bool FileAccessPackCompressed::store_buffer(const uint8_t *p_src, uint64_t p_length) {
+	ERR_FAIL_V(false);
+}
+
+bool FileAccessPackCompressed::file_exists(const String &p_name) {
+	return false;
+}
+
+void FileAccessPackCompressed::close() {
+	if (compressed_file.is_valid()) {
+		compressed_file->close();
+		compressed_file.unref();
+	}
+	f.unref();
+}
+
+FileAccessPackCompressed::FileAccessPackCompressed(const String &p_path, const PackedData::PackedFile &p_file) {
+	path = p_path;
+	pf = p_file;
+	pos = 0;
+	eof = false;
+	
+	// Open the base file (possibly encrypted)
+	if (pf.bundle) {
+		String simplified_path = p_path.simplify_path();
+		f = FileAccess::open(simplified_path, FileAccess::READ | FileAccess::SKIP_PACK);
+		ERR_FAIL_COND_MSG(f.is_null(), vformat(R"(Can't open pack-referenced compressed file "%s" from sparse pack "%s".)", simplified_path, pf.pack));
+	} else {
+		f = FileAccess::open(pf.pack, FileAccess::READ);
+		ERR_FAIL_COND_MSG(f.is_null(), vformat(R"(Can't open pack-referenced compressed file "%s" from pack "%s".)", p_path, pf.pack));
+		f->seek(pf.offset);
+	}
+
+	if (pf.encrypted) {
+		Ref<FileAccessEncrypted> fae;
+		fae.instantiate();
+		ERR_FAIL_COND_MSG(fae.is_null(), vformat(R"(Can't open encrypted pack-referenced compressed file "%s" from pack "%s".)", p_path, pf.pack));
+
+		Vector<uint8_t> key;
+		key.resize(32);
+		for (int i = 0; i < key.size(); i++) {
+			key.write[i] = script_encryption_key[i];
+		}
+
+		Error err = fae->open_and_parse(f, key, FileAccessEncrypted::MODE_READ, false);
+		ERR_FAIL_COND_MSG(err, vformat(R"(Can't open encrypted pack-referenced compressed file "%s" from pack "%s".)", p_path, pf.pack));
+		f = fae;
+	}
+
+	// Now use FileAccessCompressed to handle the chunked decompression
+	compressed_file.instantiate();
+	ERR_FAIL_COND_MSG(compressed_file.is_null(), vformat(R"(Can't create compressed file accessor for "%s".)", p_path));
+	
+	// Configure and open the compressed file
+	compressed_file->configure("PCMP", Compression::MODE_ZSTD);
+	Error err = compressed_file->open_after_magic(f);
+	ERR_FAIL_COND_MSG(err != OK, vformat(R"(Failed to open compressed file "%s" from pack "%s".)", p_path, pf.pack));
 }
 
 //////////////////////////////////////////////////////////////////////////////////

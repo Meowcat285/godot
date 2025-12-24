@@ -35,6 +35,7 @@
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension.h"
+#include "core/io/compression.h"
 #include "core/io/delta_encoding.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access_encrypted.h"
@@ -308,14 +309,145 @@ Error EditorExportPlatform::_save_pack_file(const Ref<EditorExportPreset> &p_pre
 	SavedData sd;
 	sd.path_utf8 = simplified_path.trim_prefix("res://").utf8();
 	sd.ofs = (pd->use_sparse_pck) ? 0 : pd->f->get_position();
-	sd.size = p_data.size();
+	sd.uncompressed_size = p_data.size();
 	sd.delta = p_delta;
-	Error err = _encrypt_and_store_data(ftmp, simplified_path, p_data, p_enc_in_filters, p_enc_ex_filters, p_key, p_seed, sd.encrypted);
+	sd.compressed = false;
+
+	// Check if file should be compressed
+	bool compress_pck = p_preset->get("binary_format/compress_pck");
+	Vector<uint8_t> data_to_store = p_data;
+	
+	if (compress_pck && !pd->use_sparse_pck && !p_delta) {
+		// Get compression filters
+		String comp_in_filters_str = p_preset->get("binary_format/compression_include_filters");
+		String comp_ex_filters_str = p_preset->get("binary_format/compression_exclude_filters");
+		
+		Vector<String> comp_in_filters = comp_in_filters_str.split(",");
+		Vector<String> comp_ex_filters = comp_ex_filters_str.split(",");
+		
+		bool should_compress = false;
+		for (int i = 0; i < comp_in_filters.size(); ++i) {
+			String filter = comp_in_filters[i].strip_edges();
+			if (!filter.is_empty() && (p_path.matchn(filter) || p_path.trim_prefix("res://").matchn(filter))) {
+				should_compress = true;
+				break;
+			}
+		}
+		
+		for (int i = 0; i < comp_ex_filters.size(); ++i) {
+			String filter = comp_ex_filters[i].strip_edges();
+			if (!filter.is_empty() && (p_path.matchn(filter) || p_path.trim_prefix("res://").matchn(filter))) {
+				should_compress = false;
+				break;
+			}
+		}
+		
+		if (should_compress) {
+			// Use chunked compression format compatible with FileAccessCompressed
+			// Get block size from export settings (default 64KB)
+			int block_size_setting = p_preset->get("binary_format/compression_block_size");
+			const uint32_t block_size = (block_size_setting > 0) ? block_size_setting : 65536;
+			const Compression::Mode cmode = Compression::MODE_ZSTD;
+			
+			Vector<uint8_t> compressed_file;
+			int64_t file_size_estimate = 16 + ((p_data.size() / block_size) + 2) * 4 + p_data.size(); // Rough estimate
+			compressed_file.resize(file_size_estimate);
+			
+			// Write compressed file header
+			uint8_t *write_ptr = compressed_file.ptrw();
+			int write_pos = 0;
+			
+			// Magic "PCMP"
+			write_ptr[write_pos++] = 'P';
+			write_ptr[write_pos++] = 'C';
+			write_ptr[write_pos++] = 'M';
+			write_ptr[write_pos++] = 'P';
+			
+			// Compression mode (4 bytes)
+			encode_uint32(cmode, write_ptr + write_pos);
+			write_pos += 4;
+			
+			// Block size (4 bytes)
+			encode_uint32(block_size, write_ptr + write_pos);
+			write_pos += 4;
+			
+			// Uncompressed size (4 bytes)
+			encode_uint32(p_data.size(), write_ptr + write_pos);
+			write_pos += 4;
+			
+			uint32_t block_count = (p_data.size() / block_size) + ((p_data.size() % block_size) ? 1 : 0);
+			if (block_count == 0 && p_data.size() > 0) {
+				block_count = 1;
+			}
+			
+			int block_table_pos = write_pos;
+			write_pos += block_count * 4; // Reserve space for block sizes
+			
+			// Compress and write blocks
+			Vector<uint32_t> block_sizes;
+			block_sizes.resize(block_count);
+			
+			int64_t max_compressed_size = Compression::get_max_compressed_buffer_size(block_size, cmode);
+			Vector<uint8_t> compressed_block;
+			compressed_block.resize(max_compressed_size);
+			
+			for (uint32_t i = 0; i < block_count; i++) {
+				uint32_t bl = MIN(block_size, p_data.size() - (i * block_size));
+				const uint8_t *bp = p_data.ptr() + (i * block_size);
+				
+				int64_t compressed_size = Compression::compress(compressed_block.ptrw(), bp, bl, cmode);
+				if (compressed_size < 0) {
+					// Compression failed, don't compress this file
+					should_compress = false;
+					break;
+				}
+				
+				// Resize compressed_file if needed
+				if (write_pos + compressed_size + 4 > compressed_file.size()) {
+					compressed_file.resize(write_pos + compressed_size + max_compressed_size + 1024);
+					write_ptr = compressed_file.ptrw();
+				}
+				
+				memcpy(write_ptr + write_pos, compressed_block.ptr(), compressed_size);
+				write_pos += compressed_size;
+				block_sizes.write[i] = compressed_size;
+			}
+			
+			if (should_compress) {
+				// Write magic at the end
+				if (write_pos + 4 > compressed_file.size()) {
+					compressed_file.resize(write_pos + 4);
+					write_ptr = compressed_file.ptrw();
+				}
+				write_ptr[write_pos++] = 'P';
+				write_ptr[write_pos++] = 'C';
+				write_ptr[write_pos++] = 'M';
+				write_ptr[write_pos++] = 'P';
+				
+				// Write block sizes
+				for (uint32_t i = 0; i < block_count; i++) {
+					encode_uint32(block_sizes[i], write_ptr + block_table_pos + (i * 4));
+				}
+				
+				// Resize to actual size
+				compressed_file.resize(write_pos);
+				
+				// Only use compression if it actually saves space
+				if (compressed_file.size() < p_data.size()) {
+					data_to_store = compressed_file;
+					sd.compressed = true;
+				}
+			}
+		}
+	}
+	
+	sd.size = data_to_store.size();
+	Error err = _encrypt_and_store_data(ftmp, simplified_path, data_to_store, p_enc_in_filters, p_enc_ex_filters, p_key, p_seed, sd.encrypted);
 	if (err != OK) {
 		return err;
 	}
 	if (!pd->use_sparse_pck) {
-		ERR_FAIL_COND_V(pd->f->get_position() - sd.ofs < (uint64_t)p_data.size(), ERR_FILE_CANT_WRITE);
+		ERR_FAIL_COND_V(pd->f->get_position() - sd.ofs < (uint64_t)data_to_store.size(), ERR_FILE_CANT_WRITE);
 	}
 
 	if (!pd->use_sparse_pck) {
@@ -325,7 +457,7 @@ Error EditorExportPlatform::_save_pack_file(const Ref<EditorExportPreset> &p_pre
 		}
 	}
 
-	// Store MD5 of original file.
+	// Store MD5 of original (uncompressed) file.
 	{
 		unsigned char hash[16];
 		CryptoCore::md5(p_data.ptr(), p_data.size(), hash);
@@ -2051,7 +2183,14 @@ bool EditorExportPlatform::_encrypt_and_store_directory(Ref<FileAccess> p_fd, Pa
 		if (p_pack_data.file_ofs[i].delta) {
 			flags |= PACK_FILE_DELTA;
 		}
+		if (p_pack_data.file_ofs[i].compressed) {
+			flags |= PACK_FILE_COMPRESSED;
+		}
 		fhead->store_32(flags);
+		
+		if (p_pack_data.file_ofs[i].compressed) {
+			fhead->store_64(p_pack_data.file_ofs[i].uncompressed_size);
+		}
 	}
 
 	if (fae.is_valid()) {

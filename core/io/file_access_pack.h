@@ -55,6 +55,7 @@ enum PackFileFlags {
 	PACK_FILE_ENCRYPTED = 1 << 0,
 	PACK_FILE_REMOVAL = 1 << 1,
 	PACK_FILE_DELTA = 1 << 2,
+	PACK_FILE_COMPRESSED = 1 << 3,
 };
 
 class PackSource;
@@ -74,6 +75,8 @@ public:
 		bool encrypted;
 		bool bundle;
 		bool delta;
+		bool compressed;
+		uint64_t uncompressed_size;
 	};
 
 private:
@@ -119,7 +122,7 @@ private:
 
 public:
 	void add_pack_source(PackSource *p_source);
-	void add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted = false, bool p_bundle = false, bool p_delta = false); // for PackSource
+	void add_path(const String &p_pkg_path, const String &p_path, uint64_t p_ofs, uint64_t p_size, const uint8_t *p_md5, PackSource *p_src, bool p_replace_files, bool p_encrypted = false, bool p_bundle = false, bool p_delta = false, bool p_compressed = false, uint64_t p_uncompressed_size = 0); // for PackSource
 	void remove_path(const String &p_path);
 	uint8_t *get_file_hash(const String &p_path);
 	Vector<PackedFile> get_delta_patches(const String &p_path) const;
@@ -217,6 +220,59 @@ public:
 	virtual void close() override;
 
 	FileAccessPack(const String &p_path, const PackedData::PackedFile &p_file);
+};
+
+class FileAccessPackCompressed : public FileAccess {
+	GDSOFTCLASS(FileAccessPackCompressed, FileAccess);
+	PackedData::PackedFile pf;
+
+	String path;
+	mutable uint64_t pos;
+	mutable bool eof;
+	
+	Ref<FileAccess> f;
+	Ref<FileAccessCompressed> compressed_file;
+	
+	virtual Error open_internal(const String &p_path, int p_mode_flags) override;
+	virtual uint64_t _get_modified_time(const String &p_file) override { return 0; }
+	virtual uint64_t _get_access_time(const String &p_file) override { return 0; }
+	virtual int64_t _get_size(const String &p_file) override { return -1; }
+	virtual BitField<FileAccess::UnixPermissionFlags> _get_unix_permissions(const String &p_file) override { return 0; }
+	virtual Error _set_unix_permissions(const String &p_file, BitField<FileAccess::UnixPermissionFlags> p_permissions) override { return FAILED; }
+
+	virtual bool _get_hidden_attribute(const String &p_file) override { return false; }
+	virtual Error _set_hidden_attribute(const String &p_file, bool p_hidden) override { return ERR_UNAVAILABLE; }
+	virtual bool _get_read_only_attribute(const String &p_file) override { return false; }
+	virtual Error _set_read_only_attribute(const String &p_file, bool p_ro) override { return ERR_UNAVAILABLE; }
+
+public:
+	virtual bool is_open() const override;
+
+	virtual String get_path() const override { return path; }
+	virtual String get_path_absolute() const override { return path; }
+
+	virtual void seek(uint64_t p_position) override;
+	virtual void seek_end(int64_t p_position = 0) override;
+	virtual uint64_t get_position() const override;
+	virtual uint64_t get_length() const override;
+
+	virtual bool eof_reached() const override;
+
+	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
+
+	virtual void set_big_endian(bool p_big_endian) override;
+
+	virtual Error get_error() const override;
+
+	virtual Error resize(int64_t p_length) override { return ERR_UNAVAILABLE; }
+	virtual void flush() override;
+	virtual bool store_buffer(const uint8_t *p_src, uint64_t p_length) override;
+
+	virtual bool file_exists(const String &p_name) override;
+
+	virtual void close() override;
+
+	FileAccessPackCompressed(const String &p_path, const PackedData::PackedFile &p_file);
 };
 
 int64_t PackedData::get_size(const String &p_path) {
