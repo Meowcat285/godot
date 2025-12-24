@@ -500,6 +500,14 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 
 	OPCODES_TABLE;
 
+	if (jit_function) {
+		Variant ret;
+		typedef void (*JitFunc)(GDScriptInstance *, const Variant **, int, Callable::CallError &, Variant *);
+		JitFunc func = (JitFunc)jit_function;
+		func(p_instance, p_args, p_argcount, r_err, &ret);
+		return ret;
+	}
+
 	if (!_code_ptr) {
 		return _get_default_variant_for_data_type(return_type);
 	}
