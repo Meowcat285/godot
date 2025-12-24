@@ -137,3 +137,37 @@ There are many other classes in the GDScript module. Here is a brief overview of
 - Editor-related functions can be found in parts of `GDScriptLanguage`, originally declared in [`gdscript.h`](gdscript.h) but defined in [`gdscript_editor.cpp`](gdscript_editor.cpp). Code highlighting can be found in [`GDScriptSyntaxHighlighter`](editor/gdscript_highlighter.h).
 - GDScript decompilation is found in [`gdscript_disassembler.cpp`](gdscript_disassembler.h), defined as `GDScriptFunction::disassemble()`.
 - Documentation generation from GDScript comments in [`GDScriptDocGen`](editor/gdscript_docgen.h)
+- JIT (Just-In-Time) compilation infrastructure in [`GDScriptJIT`](gdscript_jit.h).
+
+
+## JIT Compilation (Experimental)
+
+GDScript includes experimental infrastructure for Just-In-Time (JIT) compilation, which can optionally compile frequently-executed GDScript functions to native code for improved performance.
+
+### Configuration
+
+JIT compilation can be configured through project settings under `debug/gdscript/jit/`:
+
+- **mode**: Controls the JIT compilation mode:
+  - `Disabled` (default): No JIT compilation, uses the bytecode interpreter only.
+  - `Enabled`: Automatically JIT compile "hot" functions that exceed a call threshold.
+  - `Aggressive`: JIT compile all functions immediately upon loading.
+
+- **hot_function_threshold**: The number of times a function must be called before it's considered "hot" and eligible for JIT compilation (default: 1000).
+
+### Implementation Status
+
+The current JIT infrastructure provides the foundational hooks for JIT compilation but does not include an actual native code generation backend. A complete implementation would require:
+
+1. Integration with a JIT compilation library (such as LLVM, or a custom code generator).
+2. A code generator that translates GDScript bytecode to native machine code.
+3. Runtime code patching and execution infrastructure.
+4. Proper handling of Godot's dynamic Variant type system in native code.
+
+### Platform Support
+
+JIT compilation requires platform-specific native code generation. The infrastructure currently supports:
+- x86_64 (64-bit Intel/AMD)
+- ARM64 (64-bit ARM)
+
+On unsupported platforms, JIT mode is automatically disabled and falls back to the bytecode interpreter.

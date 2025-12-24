@@ -32,6 +32,7 @@
 
 #include "gdscript.h"
 #include "gdscript_cache.h"
+#include "gdscript_jit.h"
 #include "gdscript_parser.h"
 #include "gdscript_tokenizer_buffer.h"
 #include "gdscript_utility_functions.h"
@@ -70,6 +71,7 @@ GDScriptLanguage *script_language_gd = nullptr;
 Ref<ResourceFormatLoaderGDScript> resource_loader_gd;
 Ref<ResourceFormatSaverGDScript> resource_saver_gd;
 GDScriptCache *gdscript_cache = nullptr;
+GDScriptJIT *gdscript_jit = nullptr;
 
 #ifdef TOOLS_ENABLED
 
@@ -151,6 +153,9 @@ void initialize_gdscript_module(ModuleInitializationLevel p_level) {
 
 		gdscript_cache = memnew(GDScriptCache);
 
+		gdscript_jit = memnew(GDScriptJIT);
+		gdscript_jit->initialize();
+
 		GDScriptUtilityFunctions::register_functions();
 	}
 
@@ -169,6 +174,11 @@ void initialize_gdscript_module(ModuleInitializationLevel p_level) {
 void uninitialize_gdscript_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
 		ScriptServer::unregister_language(script_language_gd);
+
+		if (gdscript_jit) {
+			gdscript_jit->finalize();
+			memdelete(gdscript_jit);
+		}
 
 		if (gdscript_cache) {
 			memdelete(gdscript_cache);
