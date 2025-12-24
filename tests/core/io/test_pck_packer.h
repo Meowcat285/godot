@@ -116,4 +116,60 @@ TEST_CASE("[PCKPacker] Pack a PCK file with some files and directories") {
 			f->get_length() <= 27000,
 			"The generated non-empty PCK file shouldn't be too large.");
 }
+
+TEST_CASE("[PCKPacker] Pack a PCK file with compressed files") {
+	PCKPacker pck_packer;
+	const String output_pck_path = TestUtils::get_temp_path("output_compressed.pck");
+	CHECK_MESSAGE(
+			pck_packer.pck_start(output_pck_path) == OK,
+			"Starting a PCK file should return an OK error code.");
+
+	const String base_dir = OS::get_singleton()->get_executable_path().get_base_dir();
+
+	// Add uncompressed file
+	CHECK_MESSAGE(
+			pck_packer.add_file("uncompressed.py", base_dir.path_join("../version.py"), false, false) == OK,
+			"Adding an uncompressed file should return an OK error code.");
+
+	// Add compressed file
+	CHECK_MESSAGE(
+			pck_packer.add_file("compressed.py", base_dir.path_join("../version.py"), false, true) == OK,
+			"Adding a compressed file should return an OK error code.");
+
+	CHECK_MESSAGE(
+			pck_packer.flush() == OK,
+			"Flushing the PCK with compressed files should return an OK error code.");
+
+	Error err;
+	Ref<FileAccess> f = FileAccess::open(output_pck_path, FileAccess::READ, &err);
+	CHECK_MESSAGE(
+			err == OK,
+			"The generated compressed PCK file should be opened successfully.");
+
+	// Verify that the PCK can be loaded
+	PackedData *pd = PackedData::get_singleton();
+	err = pd->add_pack(output_pck_path, true, 0);
+	CHECK_MESSAGE(
+			err == OK,
+			"The compressed PCK file should be loaded successfully.");
+
+	// Try to read the compressed file
+	Ref<FileAccess> compressed_file = pd->try_open_path("res://compressed.py");
+	CHECK_MESSAGE(
+			compressed_file.is_valid(),
+			"Should be able to open compressed file from PCK.");
+
+	if (compressed_file.is_valid()) {
+		Vector<uint8_t> compressed_data = compressed_file->get_buffer(compressed_file->get_length());
+		Vector<uint8_t> original_data = FileAccess::get_file_as_bytes(base_dir.path_join("../version.py"));
+
+		CHECK_MESSAGE(
+				compressed_data.size() == original_data.size(),
+				"Compressed file should decompress to original size.");
+
+		CHECK_MESSAGE(
+				memcmp(compressed_data.ptr(), original_data.ptr(), original_data.size()) == 0,
+				"Decompressed data should match original data.");
+	}
+}
 } // namespace TestPCKPacker
