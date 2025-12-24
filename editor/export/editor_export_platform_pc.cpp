@@ -61,6 +61,9 @@ void EditorExportPlatformPC::get_export_options(List<ExportOption> *r_options) c
 	r_options->push_back(ExportOption(PropertyInfo(Variant::INT, "debug/export_console_wrapper", PROPERTY_HINT_ENUM, "No,Debug Only,Debug and Release"), 1));
 
 	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "binary_format/embed_pck"), false));
+	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "binary_format/compress_pck"), false));
+	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "binary_format/compression_include_filters"), "*.res,*.scn,*.tscn,*.tres"));
+	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "binary_format/compression_exclude_filters"), ""));
 
 	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "texture_format/s3tc_bptc"), true));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "texture_format/etc2_astc"), false));
