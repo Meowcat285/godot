@@ -8,6 +8,9 @@ env_gdscript = env_modules.Clone()
 
 env_gdscript.add_source_files(env.modules_sources, "*.cpp")
 
+# Add sljit include path
+env_gdscript.Prepend(CPPPATH=["#thirdparty/pcre2/deps/sljit/sljit_src"])
+
 if env.editor_build:
     env_gdscript.add_source_files(env.modules_sources, "./editor/*.cpp")
 

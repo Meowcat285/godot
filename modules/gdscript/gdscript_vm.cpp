@@ -500,18 +500,6 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 
 	OPCODES_TABLE;
 
-	if (jit_function) {
-		Variant ret;
-		typedef void (*JitFunc)(GDScriptInstance *, const Variant **, int, Callable::CallError &, Variant *);
-		JitFunc func = (JitFunc)jit_function;
-		func(p_instance, p_args, p_argcount, r_err, &ret);
-		return ret;
-	}
-
-	if (!_code_ptr) {
-		return _get_default_variant_for_data_type(return_type);
-	}
-
 	r_err.error = Callable::CallError::CALL_OK;
 
 	static thread_local int call_depth = 0;
@@ -536,6 +524,11 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 		_err_print_error(err_func.utf8().get_data(), err_file.utf8().get_data(), err_line, err_text, false, ERR_HANDLER_SCRIPT);
 		GDScriptLanguage::get_singleton()->debug_break(err_text, false);
 #endif
+		return _get_default_variant_for_data_type(return_type);
+	}
+
+	if (!_code_ptr) {
+		call_depth--;
 		return _get_default_variant_for_data_type(return_type);
 	}
 
@@ -577,6 +570,15 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 			} else {
 				defarg = _argument_count - p_argcount;
 			}
+		}
+
+		if (jit_function) {
+			Variant ret;
+			typedef void (*JitFunc)(GDScriptInstance *, const Variant **, int, Callable::CallError &, Variant *);
+			JitFunc func = (JitFunc)jit_function;
+			func(p_instance, p_args, p_argcount, r_err, &ret);
+			call_depth--;
+			return ret;
 		}
 
 		alloca_size = sizeof(Variant *) * FIXED_ADDRESSES_MAX + sizeof(Variant *) * _instruction_args_size + sizeof(Variant) * _stack_size;
@@ -652,6 +654,15 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 
 		for (const KeyValue<int, Variant::Type> &E : temporary_slots) {
 			type_init_function_table[E.value](&stack[E.key]);
+		}
+
+		if (jit_function) {
+			Variant ret;
+			typedef void (*JitFunc)(GDScriptInstance *, Variant *, int, Callable::CallError &, Variant *);
+			JitFunc func = (JitFunc)jit_function;
+			func(p_instance, stack, p_argcount, r_err, &ret);
+			call_depth--;
+			return ret;
 		}
 	}
 
