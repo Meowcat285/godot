@@ -34,6 +34,7 @@
 #include "gdscript_analyzer.h"
 #include "gdscript_byte_codegen.h"
 #include "gdscript_cache.h"
+#include "gdscript_jit.h"
 #include "gdscript_utility_functions.h"
 
 #include "core/config/engine.h"
@@ -2532,6 +2533,10 @@ GDScriptFunction *GDScriptCompiler::_parse_function(Error &r_error, GDScript *p_
 	}
 
 	memdelete(codegen.generator);
+
+	if (gd_function) {
+		gd_function->jit_function = GDScriptJIT::compile(gd_function);
+	}
 
 	return gd_function;
 }

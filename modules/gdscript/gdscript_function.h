@@ -455,6 +455,7 @@ private:
 	friend class GDScriptCompiler;
 	friend class GDScriptByteCodeGenerator;
 	friend class GDScriptLanguage;
+	friend class GDScriptJIT;
 
 	StringName name;
 	StringName source;
@@ -511,6 +512,8 @@ private:
 	int _gds_utilities_count = 0;
 	int _methods_count = 0;
 	int _lambdas_count = 0;
+
+	void *jit_function = nullptr;
 
 	int *_code_ptr = nullptr;
 	const int *_default_arg_ptr = nullptr;

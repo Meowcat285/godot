@@ -31,6 +31,7 @@
 #include "gdscript_function.h"
 
 #include "gdscript.h"
+#include "gdscript_jit.h"
 
 Variant GDScriptFunction::get_constant(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, constants.size(), "<errconst>");
@@ -115,6 +116,10 @@ GDScriptFunction::GDScriptFunction() {
 }
 
 GDScriptFunction::~GDScriptFunction() {
+	if (jit_function) {
+		GDScriptJIT::free_code(jit_function);
+	}
+
 	get_script()->member_functions.erase(name);
 
 	for (int i = 0; i < lambdas.size(); i++) {
