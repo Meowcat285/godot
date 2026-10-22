@@ -35,6 +35,12 @@ jobs:
             instrumented_tests: true
             scons-flags: arch=arm64 module_mono_enabled=yes
 
+          - name: Template w/ Mono arm64, release (target=template_release, arch=arm64)
+            cache-name: android-template-mono-arm64-release
+            target: template_release
+            instrumented_tests: false
+            scons-flags: arch=arm64 module_mono_enabled=yes
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -103,7 +109,7 @@ jobs:
         continue-on-error: true
 
       - name: Generate Godot templates
-        if: matrix.target == 'template_debug'
+        if: startsWith(matrix.target, 'template_')
         run: |
           cd platform/android/java
           ./gradlew generateGodotMonoTemplates
