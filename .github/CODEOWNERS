@@ -523,3 +523,17 @@
 
 /thirdparty/                                  @godotengine/buildsystem
 /thirdparty/jolt_physics/                     @godotengine/buildsystem @godotengine/jolt-physics
+
+# Content-addressed storage (fork-specific, kept last so it takes precedence)
+
+/core/crypto/cas_hash.*                       @Meowcat285
+/core/io/file_access_gcas.*                   @Meowcat285
+/editor/file_system/editor_import_artifact_store.h @Meowcat285
+/modules/cas/                                 @Meowcat285
+/modules/cas/**/*.py                          @Meowcat285 @godotengine/buildsystem
+/modules/cas/**/SCsub                         @Meowcat285 @godotengine/buildsystem
+/modules/cas/doc_classes/                     @Meowcat285 @godotengine/documentation
+/modules/cas/editor/                          @Meowcat285 @godotengine/editor
+/modules/cas/tests/                           @Meowcat285 @godotengine/tests
+/modules/texture_streaming/streamed_texture_layout_provider.* @Meowcat285
+/thirdparty/blake3/                           @Meowcat285 @godotengine/buildsystem
