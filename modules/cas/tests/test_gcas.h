@@ -171,7 +171,9 @@ TEST_CASE("[GCAS] Write and read back files") {
 	const String pack_path = TestUtils::get_temp_path("gcas_test_basic.gcas");
 	Vector<uint8_t> text = String("Hello, content-addressed world!").to_utf8_buffer();
 	Vector<uint8_t> random = make_data(1500000, 10, false);
-	Vector<uint8_t> compressible = make_data(2500000, 11, true);
+	// Constant sizes, as compilers can't tell that Vector sizes used as divisors aren't zero.
+	constexpr uint64_t compressible_size = 2500000;
+	Vector<uint8_t> compressible = make_data(compressible_size, 11, true);
 
 	GCASWriter writer;
 	writer.get_settings().zstd_level = 3;
@@ -210,8 +212,8 @@ TEST_CASE("[GCAS] Write and read back files") {
 	CHECK(f->get_length() == uint64_t(compressible.size()));
 	RandomPCG rng(12);
 	for (int i = 0; i < 200; i++) {
-		uint64_t pos = rng.rand() % compressible.size();
-		uint64_t len = MIN(uint64_t(rng.rand() % 300000), uint64_t(compressible.size()) - pos);
+		uint64_t pos = rng.rand() % compressible_size;
+		uint64_t len = MIN(uint64_t(rng.rand() % 300000), compressible_size - pos);
 		Vector<uint8_t> buf;
 		buf.resize(len);
 		f->seek(pos);

@@ -94,6 +94,20 @@ void list_files_recursive(const String &p_dir, LocalVector<String> &r_files) {
 	}
 }
 
+// The synthesized `.import` files are parsed in chunks, reading past the end is expected.
+class FileAccessImportText : public FileAccessPackedByteArray {
+	GDSOFTCLASS(FileAccessImportText, FileAccessPackedByteArray);
+
+public:
+	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override {
+		uint64_t left = get_length() - get_position();
+		if (left == 0) {
+			return 0;
+		}
+		return FileAccessPackedByteArray::get_buffer(p_dst, MIN(p_length, left));
+	}
+};
+
 } // namespace
 
 String CASImportStore::Manifest::to_text() const {
@@ -126,7 +140,8 @@ bool CASImportStore::Manifest::from_text(const String &p_text, bool p_untrusted)
 	type = cf->get_value("manifest", "type", String());
 	save_extension = cf->get_value("manifest", "save_extension", String());
 	valid = cf->get_value("manifest", "valid", false);
-	metadata = cf->get_value("manifest", "metadata", Variant());
+	// Not stored when empty (ConfigFile treats a null default as missing, so check first).
+	metadata = cf->has_section_key("manifest", "metadata") ? cf->get_value("manifest", "metadata") : Variant();
 	variants = cf->get_value("manifest", "variants", Vector<String>());
 	gen_files = cf->get_value("manifest", "gen_files", Vector<String>());
 	outputs.clear();
@@ -444,7 +459,8 @@ bool CASImportStore::test_for_reimport(const String &p_path) {
 	}
 
 	Source source;
-	if (!_compute_key(p_path, importer, params, uid, cf->get_value("remap", "generator_parameters", Variant()), source)) {
+	Variant generator_parameters = cf->has_section_key("remap", "generator_parameters") ? cf->get_value("remap", "generator_parameters") : Variant();
+	if (!_compute_key(p_path, importer, params, uid, generator_parameters, source)) {
 		return true;
 	}
 
@@ -683,7 +699,7 @@ Ref<FileAccess> CASImportStore::open_import_file(const String &p_source_path, Er
 		lines.insert(deps_end + i, deps_lines[i]);
 	}
 
-	Ref<FileAccessPackedByteArray> fa;
+	Ref<FileAccessImportText> fa;
 	fa.instantiate();
 	fa->open_custom(String("\n").join(lines).to_utf8_buffer());
 	return fa;
