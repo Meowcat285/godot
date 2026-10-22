@@ -1,0 +1,54 @@
+name: 📦 Release
+on:
+  workflow_call:
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    name: Publish release
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Package release assets
+        run: |
+          ls -R artifacts | head -n 200
+          python3 ./misc/scripts/package_release.py --artifacts artifacts --output release
+
+      # Release names use the `<year>.<month>.<build>` format, where the build number resets every month.
+      - name: Determine release name
+        id: release-name
+        run: |
+          prefix="$(date -u +%Y).$(date -u +%-m)"
+          last_build="$(git ls-remote --tags origin "refs/tags/${prefix}.*" \
+            | sed -n "s|.*refs/tags/${prefix//./\\.}\.\([0-9]\+\)$|\1|p" \
+            | sort -n | tail -n 1)"
+          name="${prefix}.$(( ${last_build:-0} + 1 ))"
+          echo "Release name: ${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NAME: ${{ steps.release-name.outputs.name }}
+        run: |
+          cat > release-notes.md << EOF
+          Automated build of commit ${GITHUB_SHA} (\`${GITHUB_REF_NAME}\`).
+
+          - **Export templates:** download them from the editor via **Editor > Manage Export Templates**, or install the \`.tpz\` file manually.
+          - **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          # The target commit is used by the editor to find the export templates matching its build.
+          gh release create "${RELEASE_NAME}" release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_NAME}" \
+            --notes-file release-notes.md
