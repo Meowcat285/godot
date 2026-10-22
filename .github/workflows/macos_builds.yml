@@ -8,6 +8,8 @@ env:
   SCONS_FLAGS: >-
     dev_mode=yes
     module_text_server_fb_enabled=yes
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
   build-macos:
@@ -19,16 +21,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Editor (target=editor)
-            cache-name: macos-editor
+          - name: Editor w/ Mono (target=editor)
+            cache-name: macos-editor-mono
             target: editor
-            bin: ./bin/godot.macos.editor.universal
+            scons-flags: module_mono_enabled=yes
+            bin: ./bin/godot.macos.editor.universal.mono
+            build-mono: true
 
-          - name: Template (target=template_release)
-            cache-name: macos-template
+          - name: Template w/ Mono, release (target=template_release)
+            cache-name: macos-template-mono
             target: template_release
-            scons-flags: debug_symbols=no
-            bin: ./bin/godot.macos.template_release.universal
+            scons-flags: debug_symbols=no module_mono_enabled=yes
+            bin: ./bin/godot.macos.template_release.universal.mono
+
+          - name: Template w/ Mono, debug (target=template_debug)
+            cache-name: macos-template-mono-debug
+            target: template_debug
+            scons-flags: debug_symbols=no module_mono_enabled=yes
+            bin: ./bin/godot.macos.template_debug.universal.mono
 
     steps:
       - name: Checkout
@@ -67,6 +77,12 @@ jobs:
             echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Setup .NET SDK
+        if: matrix.build-mono
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
       - name: Setup Vulkan SDK
         id: vulkan-sdk
         run: |
@@ -101,11 +117,22 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          lipo -create ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64 -output ./bin/godot.macos.${{ matrix.target }}.universal
-          rm ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64
+          lipo -create ./bin/godot.macos.${{ matrix.target }}.x86_64.mono ./bin/godot.macos.${{ matrix.target }}.arm64.mono -output ${{ matrix.bin }}
+          rm ./bin/godot.macos.${{ matrix.target }}.x86_64.mono ./bin/godot.macos.${{ matrix.target }}.arm64.mono
           rm -rf ./bin/build_deps
           strip bin/godot.*
           chmod +x bin/godot.*
+
+      - name: Generate C# glue
+        if: matrix.build-mono
+        run: |
+          ${{ matrix.bin }} --headless --generate-mono-glue ./modules/mono/glue
+
+      - name: Build .NET solutions
+        if: matrix.build-mono
+        run: |
+          dotnet --info
+          ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=macos
 
       - name: Upload artifact
         uses: ./.github/actions/upload-artifact
