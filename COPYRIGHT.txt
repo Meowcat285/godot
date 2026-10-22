@@ -222,6 +222,11 @@ Comment: Basis Universal
 Copyright: 2019-2025, Binomial LLC.
 License: Apache-2.0
 
+Files: thirdparty/blake3/*
+Comment: BLAKE3
+Copyright: 2019-2025, Jack O'Connor and Samuel Neves
+License: CC0-1.0 or Apache-2.0
+
 Files: thirdparty/brotli/*
 Comment: Brotli
 Copyright: 2009, 2010, 2013-2016 by the Brotli Authors.

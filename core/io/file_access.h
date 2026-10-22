@@ -190,6 +190,7 @@ public:
 
 	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const = 0; ///< get an array of bytes, needs to be overwritten by children.
 	Vector<uint8_t> get_buffer(int64_t p_length) const;
+	virtual void prefetch(uint64_t p_offset, uint64_t p_length) const {} ///< hint that a byte range will be read soon (e.g. by streaming), may be ignored.
 	virtual String get_line() const;
 	virtual String get_token() const;
 	virtual Vector<String> get_csv_line(const String &p_delim = ",") const;

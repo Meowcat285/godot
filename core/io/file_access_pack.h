@@ -36,6 +36,7 @@
 #include "core/string/print_string.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/list.h"
+#include "core/templates/pair.h"
 
 // Godot's packed file magic header ("GDPC" in ASCII).
 #define PACK_HEADER_MAGIC 0x43504447
@@ -145,6 +146,7 @@ public:
 	Error add_pack(const String &p_path, bool p_replace_files, uint64_t p_offset, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>());
 
 	void clear();
+	void register_pack_uids();
 
 	_FORCE_INLINE_ Ref<FileAccess> try_open_path(const String &p_path, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>());
 	_FORCE_INLINE_ bool has_path(const String &p_path);
@@ -162,6 +164,10 @@ class PackSource {
 public:
 	virtual bool try_open_pack(const String &p_path, bool p_replace_files, uint64_t p_offset, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>()) = 0;
 	virtual Ref<FileAccess> get_file(const String &p_path, PackedData::PackedFile *p_file, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>()) = 0;
+	// UIDs carried by the pack itself (in mount order), registered with ResourceUID whenever its cache is loaded.
+	virtual void get_uids(List<Pair<ResourceUID::ID, String>> *r_uids) const {}
+	// Forget all packs opened by this source (called from PackedData::clear()).
+	virtual void clear_packs() {}
 	virtual ~PackSource() {}
 };
 
