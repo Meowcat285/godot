@@ -109,6 +109,12 @@
 				Returns export option value or value of environment variable if it is set.
 			</description>
 		</method>
+		<method name="get_pack_format" qualifiers="const">
+			<return type="int" enum="EditorExportPreset.PackFormat" />
+			<description>
+				Returns the format of the resource packs exported with this preset.
+			</description>
+		</method>
 		<method name="get_patches" qualifiers="const">
 			<return type="PackedStringArray" />
 			<description>
@@ -200,6 +206,12 @@
 		<constant name="MODE_SCRIPT_BINARY_TOKENS" value="1" enum="ScriptExportMode">
 		</constant>
 		<constant name="MODE_SCRIPT_BINARY_TOKENS_COMPRESSED" value="2" enum="ScriptExportMode">
+		</constant>
+		<constant name="PACK_FORMAT_PCK" value="0" enum="PackFormat">
+			PCK packs.
+		</constant>
+		<constant name="PACK_FORMAT_GCAS" value="1" enum="PackFormat">
+			GCAS packs: content-addressed packs where data is deduplicated and compressed in independent chunks, and patches only contain changed chunks.
 		</constant>
 	</constants>
 </class>

@@ -99,6 +99,7 @@ void EditorExport::_save() {
 		config->set_value(section, "encryption_exclude_filters", preset->get_enc_ex_filters_str());
 		config->set_value(section, "seed", preset->get_seed());
 
+		config->set_value(section, "pack_format", preset->get_pack_format() == EditorExportPreset::PACK_FORMAT_GCAS ? "gcas" : "pck");
 		config->set_value(section, "encrypt_pck", preset->get_enc_pck());
 		config->set_value(section, "encrypt_directory", preset->get_enc_directory());
 		config->set_value(section, "script_export_mode", preset->get_script_export_mode());
@@ -400,6 +401,9 @@ void EditorExport::load_config() {
 		if (config->has_section_key(section, "seed")) {
 			preset->set_seed(config->get_value(section, "seed"));
 		}
+		// Presets created before GCAS support keep using PCK.
+		preset->set_pack_format(String(config->get_value(section, "pack_format", "pck")) == "gcas" ? EditorExportPreset::PACK_FORMAT_GCAS : EditorExportPreset::PACK_FORMAT_PCK);
+
 		if (config->has_section_key(section, "encrypt_pck")) {
 			preset->set_enc_pck(config->get_value(section, "encrypt_pck"));
 		}

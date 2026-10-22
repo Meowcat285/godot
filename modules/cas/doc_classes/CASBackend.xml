@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="CASBackend" inherits="RefCounted" api_type="editor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A shared store for the editor's import cache.
+	</brief_description>
+	<description>
+		The editor keeps the results of imports in a content-addressed cache, so that importing a file with the same contents and settings again (for example after switching branches) doesn't run the importer. Backends extend this cache to other machines: they are queried when a result isn't available locally, and given the results of imports made locally.
+		Manifests describe the result of an import and are identified by the hash of everything the import depends on. Objects (imported files) are stored as lists of chunks, so that near-identical files only transfer the chunks that differ. Hashes are BLAKE3 hashes, as lowercase hexadecimal strings. Everything received from a backend is verified against its hash.
+		Backends are only used by the editor. They must be thread-safe, as imports run on multiple threads.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="_get_chunk" qualifiers="virtual">
+			<return type="PackedByteArray" />
+			<param index="0" name="hash" type="String" />
+			<description>
+				Returns the chunk with the hash [param hash], or an empty array if it isn't available.
+			</description>
+		</method>
+		<method name="_get_manifest" qualifiers="virtual">
+			<return type="PackedByteArray" />
+			<param index="0" name="key" type="String" />
+			<description>
+				Returns the manifest of the import key [param key], or an empty array if it isn't available.
+			</description>
+		</method>
+		<method name="_get_object_chunks" qualifiers="virtual">
+			<return type="PackedStringArray" />
+			<param index="0" name="hash" type="String" />
+			<description>
+				Returns the hashes of the chunks of the object with the hash [param hash], in order, or an empty array if it isn't available.
+			</description>
+		</method>
+		<method name="_has_chunks" qualifiers="virtual">
+			<return type="PackedByteArray" />
+			<param index="0" name="hashes" type="PackedStringArray" />
+			<description>
+				Returns one byte for each hash in [param hashes], which is not [code]0[/code] if the chunk is available.
+			</description>
+		</method>
+		<method name="_is_writable" qualifiers="virtual const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] if import results can be added to the backend.
+			</description>
+		</method>
+		<method name="_put_chunk" qualifiers="virtual">
+			<return type="int" enum="Error" />
+			<param index="0" name="hash" type="String" />
+			<param index="1" name="data" type="PackedByteArray" />
+			<description>
+				Stores the chunk [param data] with the hash [param hash].
+			</description>
+		</method>
+		<method name="_put_manifest" qualifiers="virtual">
+			<return type="int" enum="Error" />
+			<param index="0" name="key" type="String" />
+			<param index="1" name="data" type="PackedByteArray" />
+			<description>
+				Stores the manifest [param data] of the import key [param key]. It is called after storing all of its objects.
+			</description>
+		</method>
+		<method name="_put_object_chunks" qualifiers="virtual">
+			<return type="int" enum="Error" />
+			<param index="0" name="hash" type="String" />
+			<param index="1" name="chunks" type="PackedStringArray" />
+			<description>
+				Stores the list of chunks [param chunks] of the object with the hash [param hash]. It is called after storing all of its chunks.
+			</description>
+		</method>
+		<method name="add_import_cache_backend" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="backend" type="CASBackend" />
+			<description>
+				Adds [param backend] to the editor's import cache. Backends are queried in the order they were added.
+			</description>
+		</method>
+		<method name="remove_import_cache_backend" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="backend" type="CASBackend" />
+			<description>
+				Removes a backend added with [method add_import_cache_backend].
+			</description>
+		</method>
+	</methods>
+</class>

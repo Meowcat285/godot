@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="CASLayout" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Describes how a file is split into chunks in GCAS packages.
+	</brief_description>
+	<description>
+		A layout is returned by a [CASLayoutProvider] to control how a file is stored in GCAS packages. Files are split into chunks that are compressed independently, so reading any part of a file only requires decompressing the chunks it overlaps. Layouts make the data read together at runtime (for example a texture mipmap or a mesh LOD) map to whole chunks. All offsets are in bytes from the start of the file.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="add_cut">
+			<return type="void" />
+			<param index="0" name="offset" type="int" />
+			<description>
+				Forces a chunk boundary at [param offset].
+			</description>
+		</method>
+		<method name="add_group">
+			<return type="void" />
+			<param index="0" name="offset" type="int" />
+			<param index="1" name="length" type="int" />
+			<description>
+				Stores the range starting at [param offset] in a single chunk (for example data that is always read at once).
+			</description>
+		</method>
+		<method name="add_paged_range">
+			<return type="void" />
+			<param index="0" name="offset" type="int" />
+			<param index="1" name="length" type="int" />
+			<param index="2" name="page_size" type="int" />
+			<description>
+				Splits the range starting at [param offset] into chunks of [param page_size] bytes (for example virtual texture tiles).
+			</description>
+		</method>
+		<method name="clear">
+			<return type="void" />
+			<description>
+				Clears the layout.
+			</description>
+		</method>
+		<method name="set_range_codec">
+			<return type="void" />
+			<param index="0" name="offset" type="int" />
+			<param index="1" name="length" type="int" />
+			<param index="2" name="codec" type="int" enum="CASLayout.Codec" />
+			<param index="3" name="level" type="int" default="0" />
+			<description>
+				Stores the chunks of the range starting at [param offset] with [param codec]. For [constant CODEC_ZSTD], [param level] overrides the compression level if it isn't [code]0[/code].
+			</description>
+		</method>
+		<method name="set_range_priority">
+			<return type="void" />
+			<param index="0" name="offset" type="int" />
+			<param index="1" name="length" type="int" />
+			<param index="2" name="priority" type="int" />
+			<description>
+				Overrides the placement priority of the chunks of the range starting at [param offset] (see [member priority]).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="hint_data" type="PackedByteArray" setter="set_hint_data" getter="get_hint_data" default="PackedByteArray()">
+			Data stored in the package with the file, which runtime code can read to locate parts of the file (for example the range of each mipmap of a streamed texture).
+		</member>
+		<member name="priority" type="int" setter="set_priority" getter="get_priority" default="0">
+			Placement priority of the file's chunks. Chunks are placed in ascending priority order, so data read early can be placed together at the start of the package.
+		</member>
+	</members>
+	<constants>
+		<constant name="CODEC_DEFAULT" value="0" enum="Codec">
+			Use the packer's default (Zstandard, unless the file type is known to be already compressed).
+		</constant>
+		<constant name="CODEC_RAW" value="1" enum="Codec">
+			Store chunks without compression.
+		</constant>
+		<constant name="CODEC_ZSTD" value="2" enum="Codec">
+			Compress chunks with Zstandard.
+		</constant>
+	</constants>
+</class>

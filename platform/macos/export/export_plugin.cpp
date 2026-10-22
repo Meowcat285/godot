@@ -2494,7 +2494,7 @@ Error EditorExportPlatformMacOS::export_project(const Ref<EditorExportPreset> &p
 			};
 		}
 
-		String pack_path = tmp_app_path_name + "/Contents/Resources/" + pkg_name + ".pck";
+		String pack_path = tmp_app_path_name + "/Contents/Resources/" + pkg_name + get_pack_extension(p_preset);
 		Vector<SharedObject> shared_objects;
 		err = save_pack(p_preset, p_debug, pack_path, &shared_objects);
 

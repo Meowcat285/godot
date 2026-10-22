@@ -1142,6 +1142,9 @@
 			[b]Note:[/b] Because a resource's file extension may change in an exported project, it is heavily recommended to use [method @GDScript.load] or [ResourceLoader] instead of [FileAccess] to load resources dynamically.
 			[b]Note:[/b] The project settings file ([code]project.godot[/code]) will always be converted to binary on export, regardless of this setting.
 		</member>
+		<member name="editor/export/gcas/compression_level" type="int" setter="" getter="" default="19">
+			The Zstandard compression level used when exporting GCAS packs. Higher levels make packs smaller and exports slower, but don't affect the time it takes to read them.
+		</member>
 		<member name="editor/import/atlas_max_width" type="int" setter="" getter="" default="2048">
 			The maximum width to use when importing textures as an atlas. The value will be rounded to the nearest power of two when used. Use this to prevent imported textures from growing too large in the other direction.
 		</member>
@@ -1221,6 +1224,9 @@
 		<member name="editor/version_control/autoload_on_startup" type="bool" setter="" getter="" default="false">
 		</member>
 		<member name="editor/version_control/plugin_name" type="String" setter="" getter="" default="&quot;&quot;">
+		</member>
+		<member name="file_access/gcas/chunk_cache_size_mb" type="int" setter="" getter="" default="16">
+			The amount of memory used to keep decompressed chunks of files read from GCAS packs, so that reading nearby data again (for example when streaming textures) doesn't decompress it again.
 		</member>
 		<member name="filesystem/import/blender/enabled" type="bool" setter="" getter="" default="true">
 			If [code]true[/code], Blender 3D scene files with the [code].blend[/code] extension will be imported by converting them to glTF 2.0.

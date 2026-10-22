@@ -329,6 +329,7 @@ void ProjectExportDialog::_edit_preset(int p_index) {
 	parameters->set_object_class(current->get_platform()->get_class_name());
 	parameters->edit(current.ptr());
 
+	pack_format->select(current->get_pack_format());
 	export_filter->select(current->get_export_filter());
 	include_filters->set_text(current->get_include_filter());
 	include_label->set_text(_get_resource_export_header(current->get_export_filter()));
@@ -839,6 +840,7 @@ void ProjectExportDialog::_duplicate_preset() {
 	preset->set_custom_features(current->get_custom_features());
 	preset->set_enc_in_filters_str(current->get_enc_in_filters_str());
 	preset->set_enc_ex_filters_str(current->get_enc_ex_filters_str());
+	preset->set_pack_format(current->get_pack_format());
 	preset->set_enc_pck(current->get_enc_pck());
 	preset->set_enc_directory(current->get_enc_directory());
 	preset->set_script_encryption_key(current->get_script_encryption_key());
@@ -1302,6 +1304,19 @@ void ProjectExportDialog::_set_file_export_mode(int p_id) {
 	_propagate_file_export_mode(include_files->get_root(), EditorExportPreset::MODE_FILE_NOT_CUSTOMIZED);
 }
 
+void ProjectExportDialog::_pack_format_changed(int p_index) {
+	if (updating) {
+		return;
+	}
+
+	Ref<EditorExportPreset> current = get_current_preset();
+	ERR_FAIL_COND(current.is_null());
+
+	current->set_pack_format(EditorExportPreset::PackFormat(pack_format->get_item_id(p_index)));
+
+	_update_current_preset();
+}
+
 void ProjectExportDialog::_patch_delta_encoding_changed(bool p_pressed) {
 	if (updating) {
 		return;
@@ -1469,14 +1484,14 @@ void ProjectExportDialog::_export_pck_zip_selected(const String &p_path) {
 		} else {
 			platform->export_zip(current, export_debug, p_path);
 		}
-	} else if (p_path.ends_with(".pck")) {
+	} else if (p_path.ends_with(".pck") || p_path.ends_with(".gcas")) {
 		if (export_as_patch) {
 			platform->export_pack_patch(current, export_debug, p_path);
 		} else {
 			platform->export_pack(current, export_debug, p_path);
 		}
 	} else {
-		ERR_FAIL_MSG("Path must end with .pck or .zip");
+		ERR_FAIL_MSG("Path must end with .gcas, .pck or .zip");
 	}
 }
 
@@ -1762,6 +1777,14 @@ ProjectExportDialog::ProjectExportDialog() {
 	resources_vb->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	resources_scroll_container->add_child(resources_vb);
 
+	pack_format = memnew(OptionButton);
+	pack_format->set_accessibility_name(TTRC("Pack Format"));
+	pack_format->add_item(TTRC("PCK"), EditorExportPreset::PACK_FORMAT_PCK);
+	pack_format->add_item(TTRC("GCAS (content-addressed, compressed)"), EditorExportPreset::PACK_FORMAT_GCAS);
+	pack_format->set_tooltip_text(TTRC("Format of the exported resource pack.\nGCAS packs deduplicate and compress data in independent chunks (which can still be streamed), and patches only contain changed chunks.\nPCK packs support encryption and delta encoding."));
+	pack_format->connect(SceneStringName(item_selected), callable_mp(this, &ProjectExportDialog::_pack_format_changed));
+	resources_vb->add_margin_child(TTRC("Pack Format:"), pack_format);
+
 	export_filter = memnew(OptionButton);
 	export_filter->set_accessibility_name(TTRC("Export Mode"));
 	export_filter->add_item(TTRC("Export all resources in the project"));
@@ -1899,6 +1922,7 @@ ProjectExportDialog::ProjectExportDialog() {
 	patch_vb->add_margin_child(TTRC("Base Packs:"), patches, true);
 
 	patch_dialog = memnew(EditorFileDialog);
+	patch_dialog->add_filter("*.gcas", TTRC("Godot Content-Addressed Pack"));
 	patch_dialog->add_filter("*.pck", TTRC("Godot Project Pack"));
 	patch_dialog->add_filter("*.aab", TTRC("Android App Bundle"));
 	patch_dialog->add_filter("*.apk", TTRC("Android Package"));
@@ -2072,6 +2096,7 @@ ProjectExportDialog::ProjectExportDialog() {
 
 	export_pck_zip = memnew(EditorFileDialog);
 	export_pck_zip->add_filter("*.zip", TTRC("ZIP File"));
+	export_pck_zip->add_filter("*.gcas", TTRC("Godot Content-Addressed Pack"));
 	export_pck_zip->add_filter("*.pck", TTRC("Godot Project Pack"));
 	export_pck_zip->set_access(EditorFileDialog::ACCESS_FILESYSTEM);
 	export_pck_zip->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
