@@ -28,11 +28,17 @@ jobs:
             bin: ./bin/godot.macos.editor.universal.mono
             build-mono: true
 
-          - name: Template w/ Mono (target=template_release)
+          - name: Template w/ Mono, release (target=template_release)
             cache-name: macos-template-mono
             target: template_release
             scons-flags: debug_symbols=no module_mono_enabled=yes
             bin: ./bin/godot.macos.template_release.universal.mono
+
+          - name: Template w/ Mono, debug (target=template_debug)
+            cache-name: macos-template-mono-debug
+            target: template_debug
+            scons-flags: debug_symbols=no module_mono_enabled=yes
+            bin: ./bin/godot.macos.template_debug.universal.mono
 
     steps:
       - name: Checkout

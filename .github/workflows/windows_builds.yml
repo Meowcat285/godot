@@ -36,11 +36,18 @@ jobs:
             compiler: msvc
             build-mono: true
 
-          - name: Template w/ Mono (target=template_release)
+          - name: Template w/ Mono, release (target=template_release)
             cache-name: windows-template-mono
             target: template_release
             scons-flags: module_mono_enabled=yes
             bin: ./bin/godot.windows.template_release.x86_64.mono.console.exe
+            compiler: msvc
+
+          - name: Template w/ Mono, debug (target=template_debug)
+            cache-name: windows-template-mono-debug
+            target: template_debug
+            scons-flags: module_mono_enabled=yes
+            bin: ./bin/godot.windows.template_debug.x86_64.mono.console.exe
             compiler: msvc
 
     steps:
