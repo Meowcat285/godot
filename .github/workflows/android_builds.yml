@@ -23,12 +23,6 @@ jobs:
       matrix:
         include:
           # Mono is only supported for Android export templates, not the Android editor.
-          - name: Template w/ Mono arm32 (target=template_debug, arch=arm32)
-            cache-name: android-template-mono-arm32
-            target: template_debug
-            instrumented_tests: false
-            scons-flags: arch=arm32 module_mono_enabled=yes
-
           - name: Template w/ Mono arm64 (target=template_debug, arch=arm64)
             cache-name: android-template-mono-arm64
             target: template_debug
