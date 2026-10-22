@@ -64,43 +64,41 @@
 
 #include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For mono.
 
+// Export templates are downloaded from the GitHub releases of this repository.
+// A release containing an export templates archive is published by the CI for each build
+// of the default branch (see `.github/workflows/release.yml`).
+static constexpr const char *EXPORT_TEMPLATES_REPOSITORY = "Meowcat285/godot";
+// Maximum number of releases listed as mirrors, not counting the release matching this build.
+static constexpr int MAX_LISTED_RELEASES = 10;
+
 void ExportTemplateManager::_request_mirrors() {
 	mirrors_list->clear();
 	mirrors_empty = true;
 	_update_install_button();
 
-	// Downloadable export templates are only available for stable and official alpha/beta/RC builds
-	// (which always have a number following their status, e.g. "alpha1").
-	// Therefore, don't display download-related features when using a development version
-	// (whose builds aren't numbered).
-	if (!strcmp(GODOT_VERSION_STATUS, "dev") || !strcmp(GODOT_VERSION_STATUS, "beta") || !strcmp(GODOT_VERSION_STATUS, "rc")) {
-		_set_empty_mirror_list();
-		mirrors_list->set_tooltip_text(TTRC("Official export templates aren't available for development builds."));
 #ifdef REAL_T_IS_DOUBLE
-	} else if (true) {
-		_set_empty_mirror_list();
-		mirrors_list->set_tooltip_text(TTRC("Official export templates aren't available for double-precision builds."));
-#endif
-	} else if (!_is_online()) {
+	_set_empty_mirror_list();
+	mirrors_list->set_tooltip_text(TTRC("Export templates aren't available for double-precision builds."));
+#else
+	if (!_is_online()) {
 		mirrors_list->set_tooltip_text(TTRC("Template downloading is disabled in offline mode."));
 	} else {
 		mirrors_list->set_tooltip_text(String());
+		const String releases_url = vformat("https://api.github.com/repos/%s/releases?per_page=100", EXPORT_TEMPLATES_REPOSITORY);
+		mirrors_requester->request(releases_url, PackedStringArray{ "Accept: application/vnd.github+json" });
 	}
-
-	if (mirrors_list->get_tooltip_text().is_empty()) {
-		const String mirrors_metadata_url = vformat("https://godotengine.org/mirrorlist/%s.json", GODOT_VERSION_FULL_CONFIG);
-		mirrors_requester->request(mirrors_metadata_url);
-	}
+#endif
 }
 
 void ExportTemplateManager::_mirrors_request_completed(int p_result, int p_response_code, const PackedStringArray &p_headers, const PackedByteArray &p_body) {
 	mirrors_list->clear();
 
 	if (p_result != HTTPRequest::RESULT_SUCCESS || p_response_code != HTTPClient::RESPONSE_OK) {
-		String error = TTR("Error getting the list of mirrors.") + "\n";
+		String error = TTR("Error getting the list of releases.") + "\n";
 		if (p_result == HTTPRequest::RESULT_SUCCESS && p_response_code == HTTPClient::RESPONSE_NOT_FOUND) {
-			// Response successful, but wrong address.
-			error += TTR("No mirrors found for this version. Template download is only available for official releases.");
+			error += vformat(TTR("Repository \"%s\" not found."), EXPORT_TEMPLATES_REPOSITORY);
+		} else if (p_result == HTTPRequest::RESULT_SUCCESS && (p_response_code == HTTPClient::RESPONSE_FORBIDDEN || p_response_code == HTTPClient::RESPONSE_TOO_MANY_REQUESTS)) {
+			error += TTR("The GitHub API rate limit may have been exceeded. Please try again later.");
 		} else {
 			error += vformat(TTR("Result: %d\nResponse code: %d"), p_result, p_response_code);
 		}
@@ -113,41 +111,79 @@ void ExportTemplateManager::_mirrors_request_completed(int p_result, int p_respo
 
 	JSON json;
 	Error err = json.parse(response_json);
-	if (err != OK) {
-		EditorNode::get_singleton()->show_warning(TTR("Error parsing JSON with the list of mirrors. Please report this issue!"));
+	if (err != OK || json.get_data().get_type() != Variant::ARRAY) {
+		EditorNode::get_singleton()->show_warning(TTR("Error parsing JSON with the list of releases."));
 		_set_empty_mirror_list();
 		return;
 	}
 
-	bool mirrors_available = false;
+	struct ReleaseMirror {
+		String name;
+		Dictionary metadata;
+	};
+	LocalVector<ReleaseMirror> mirrors;
+	bool build_release_found = false;
 
-	Dictionary mirror_data = json.get_data();
-	if (mirror_data.has("mirrors")) {
-		Array mirrors = mirror_data["mirrors"];
-		for (const Variant &mirror : mirrors) {
-			Dictionary m = mirror;
-			ERR_CONTINUE(!m.has("url") || !m.has("name"));
+	// Must match the archive name used by `misc/scripts/package_release.py`.
+	const String archive_name = vformat("Godot_v%s_export_templates.tpz", GODOT_VERSION_FULL_CONFIG);
+	const String build_hash = GODOT_VERSION_HASH;
 
-			mirrors_list->add_item(m["name"]);
-			mirrors_list->set_item_metadata(-1, m["url"]);
-
-			mirrors_available = true;
+	// Releases are sorted from newest to oldest.
+	const Array releases = json.get_data();
+	for (const Variant &release_variant : releases) {
+		const Dictionary release = release_variant;
+		if (bool(release.get("draft", false))) {
+			continue;
 		}
-		// Hard-coded for translation. Should match the up-to-date list of mirrors.
-		// TTR("Official Releases mirror")
+
+		const Array assets = release.get("assets", Array());
+		for (const Variant &asset_variant : assets) {
+			const Dictionary asset = asset_variant;
+			if (String(asset.get("name", String())) != archive_name) {
+				continue;
+			}
+
+			String release_name = release.get("name", String());
+			if (release_name.is_empty()) {
+				release_name = release.get("tag_name", String());
+			}
+
+			ReleaseMirror mirror;
+			mirror.metadata["url"] = asset.get("browser_download_url", String());
+			mirror.metadata["page"] = release.get("html_url", String());
+
+			if (!build_release_found && !build_hash.is_empty() && String(release.get("target_commitish", String())) == build_hash) {
+				// The release built from the same commit as this editor is listed first.
+				mirror.name = vformat(TTR("Release %s (this build)"), release_name);
+				mirrors.insert(0, mirror);
+				build_release_found = true;
+			} else if (mirrors.size() < (uint32_t)MAX_LISTED_RELEASES + (build_release_found ? 1 : 0)) {
+				mirror.name = vformat(TTR("Release %s"), release_name);
+				mirrors.push_back(mirror);
+			}
+			break;
+		}
 	}
-	if (!mirrors_available) {
-		_set_empty_mirror_list();
-	} else {
-		mirrors_list->set_disabled(false);
-		open_mirror->set_disabled(false);
-		mirrors_empty = false;
 
-		_update_install_button();
-		if (!is_downloading()) {
-			// Some tree buttons won't show until mirrors are loaded.
-			_update_template_tree();
-		}
+	if (mirrors.is_empty()) {
+		_set_empty_mirror_list();
+		mirrors_list->set_tooltip_text(vformat(TTR("No release of \"%s\" contains export templates for Godot %s."), EXPORT_TEMPLATES_REPOSITORY, GODOT_VERSION_FULL_CONFIG));
+		return;
+	}
+
+	for (const ReleaseMirror &mirror : mirrors) {
+		mirrors_list->add_item(mirror.name);
+		mirrors_list->set_item_metadata(-1, mirror.metadata);
+	}
+	mirrors_list->select(0);
+	mirrors_list->set_disabled(false);
+	open_mirror->set_disabled(false);
+	mirrors_empty = false;
+
+	_update_install_button();
+	if (!is_downloading()) {
+		// Some tree buttons won't show until mirrors are loaded.
+		_update_template_tree();
 	}
 }
 
@@ -160,7 +196,8 @@ void ExportTemplateManager::_set_empty_mirror_list() {
 }
 
 String ExportTemplateManager::_get_current_mirror_url() const {
-	return mirrors_list->get_item_metadata(mirrors_list->get_selected());
+	const Dictionary mirror = mirrors_list->get_item_metadata(mirrors_list->get_selected());
+	return mirror.get("url", String());
 }
 
 void ExportTemplateManager::_update_online_mode() {
@@ -188,7 +225,9 @@ void ExportTemplateManager::_force_online_mode() {
 }
 
 void ExportTemplateManager::_open_mirror() {
-	OS::get_singleton()->shell_open(_get_current_mirror_url());
+	// Open the release page rather than downloading the whole archive.
+	const Dictionary mirror = mirrors_list->get_item_metadata(mirrors_list->get_selected());
+	OS::get_singleton()->shell_open(mirror.get("page", String()));
 }
 
 void ExportTemplateManager::_delete_all() {
