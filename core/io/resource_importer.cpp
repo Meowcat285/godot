@@ -41,9 +41,19 @@ bool ResourceFormatImporter::SortImporterByName::operator()(const Ref<ResourceIm
 	return p_a->get_importer_name() < p_b->get_importer_name();
 }
 
+Ref<FileAccess> ResourceFormatImporter::open_import_file(const String &p_path, Error *r_error) {
+	if (artifact_provider) {
+		Ref<FileAccess> f = artifact_provider->open_import_file(p_path, r_error);
+		if (f.is_valid()) {
+			return f;
+		}
+	}
+	return FileAccess::open(p_path + ".import", FileAccess::READ, r_error);
+}
+
 Error ResourceFormatImporter::_get_path_and_type(const String &p_path, PathAndType &r_path_and_type, bool p_load, bool *r_valid) const {
 	Error err;
-	Ref<FileAccess> f = FileAccess::open(p_path + ".import", FileAccess::READ, &err);
+	Ref<FileAccess> f = open_import_file(p_path, &err);
 
 	if (f.is_null()) {
 		if (r_valid) {
@@ -136,6 +146,10 @@ Error ResourceFormatImporter::_get_path_and_type(const String &p_path, PathAndTy
 		}
 	}
 #endif
+
+	if (artifact_provider && !r_path_and_type.path.is_empty()) {
+		r_path_and_type.path = artifact_provider->resolve_artifact_path(r_path_and_type.path);
+	}
 
 	if (r_path_and_type.type.is_empty()) {
 		return ERR_FILE_CORRUPT;
@@ -328,7 +342,7 @@ String ResourceFormatImporter::get_internal_resource_path(const String &p_path) 
 
 void ResourceFormatImporter::get_internal_resource_path_list(const String &p_path, List<String> *r_paths) {
 	Error err;
-	Ref<FileAccess> f = FileAccess::open(p_path + ".import", FileAccess::READ, &err);
+	Ref<FileAccess> f = open_import_file(p_path, &err);
 
 	if (f.is_null()) {
 		return;

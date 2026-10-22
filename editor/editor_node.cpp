@@ -1451,7 +1451,7 @@ void EditorNode::_fs_changed() {
 						} else {
 							err = platform->export_zip(export_preset, export_defer.debug, export_path);
 						}
-					} else if (export_path.ends_with(".pck")) {
+					} else if (export_path.ends_with(".pck") || export_path.ends_with(".gcas")) {
 						if (export_defer.patch) {
 							err = platform->export_pack_patch(export_preset, export_defer.debug, export_path, export_defer.patches);
 						} else {
@@ -4371,6 +4371,7 @@ void EditorNode::_discard_changes(const String &p_str) {
 		case TOOLS_CLEAR_PROJECT_CACHE: {
 			files_to_delete_on_exit = LocalVector<String>{
 				"res://.godot/imported",
+				"res://.godot/cas",
 				"res://.godot/exported",
 				"res://.godot/mono",
 				"res://.godot/extension_list.cfg",

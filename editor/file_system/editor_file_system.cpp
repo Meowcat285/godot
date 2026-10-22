@@ -44,6 +44,7 @@
 #include "core/variant/variant_parser.h"
 #include "editor/doc/editor_help.h"
 #include "editor/editor_node.h"
+#include "editor/file_system/editor_import_artifact_store.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/inspector/editor_resource_preview.h"
 #include "editor/script/script_editor_plugin.h"
@@ -571,7 +572,7 @@ bool EditorFileSystem::_is_test_for_reimport_needed(const String &p_path, uint64
 	}
 	if (reimport_on_missing_imported_files) {
 		for (const String &path : p_import_dest_paths) {
-			if (!FileAccess::exists(path)) {
+			if (!FileAccess::exists(ResourceFormatImporter::resolve_artifact_path(path))) {
 				return true;
 			}
 		}
@@ -583,6 +584,9 @@ bool EditorFileSystem::_test_for_reimport(const String &p_path, const String &p_
 	if (p_expected_import_md5.is_empty()) {
 		// Marked as reimportation needed.
 		return true;
+	}
+	if (EditorImportArtifactStore::get_singleton()) {
+		return EditorImportArtifactStore::get_singleton()->test_for_reimport(p_path);
 	}
 	String new_md5 = FileAccess::get_md5(p_path + ".import");
 	if (p_expected_import_md5 != new_md5) {
@@ -750,7 +754,7 @@ bool EditorFileSystem::_test_for_reimport(const String &p_path, const String &p_
 
 Vector<String> EditorFileSystem::_get_import_dest_paths(const String &p_path) {
 	Error err;
-	Ref<FileAccess> f = FileAccess::open(p_path + ".import", FileAccess::READ, &err);
+	Ref<FileAccess> f = ResourceFormatImporter::open_import_file(p_path, &err);
 
 	if (f.is_null()) { // No import file, reimport.
 		return Vector<String>();
@@ -2673,6 +2677,7 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 	Ref<ResourceImporter> importer = ResourceFormatImporter::get_singleton()->get_importer_by_name(importer_name);
 
 	Error err = importer->import_group_file(p_group_file, source_file_options, base_paths);
+	EditorImportArtifactStore *artifact_store = EditorImportArtifactStore::get_singleton();
 
 	//all went well, overwrite config files with proper remaps and md5s
 	for (const KeyValue<String, HashMap<StringName, Variant>> &E : source_file_options) {
@@ -2704,13 +2709,17 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 
 			if (err == OK) {
 				String path = base_path + "." + importer->get_save_extension();
-				f->store_line("path=\"" + path + "\"");
+				if (!artifact_store) {
+					f->store_line("path=\"" + path + "\"");
+				}
 				dest_paths.push_back(path);
 			}
 
 			f->store_line("group_file=" + Variant(p_group_file).get_construct_string());
 
-			if (err == OK) {
+			if (artifact_store) {
+				artifact_store->store_import(file, importer, source_file_options[file], uid, Variant(), List<String>(), List<String>(), Variant(), err, true);
+			} else if (err == OK) {
 				f->store_line("valid=true");
 			} else {
 				f->store_line("valid=false");
@@ -2720,7 +2729,7 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 			f->store_line("");
 
 			f->store_line("source_file=" + Variant(file).get_construct_string());
-			if (dest_paths.size()) {
+			if (dest_paths.size() && !artifact_store) {
 				Array dp;
 				for (int i = 0; i < dest_paths.size(); i++) {
 					dp.push_back(dest_paths[i]);
@@ -2748,7 +2757,7 @@ Error EditorFileSystem::_reimport_group(const String &p_group_file, const Vector
 		}
 
 		// Store the md5's of the various files. These are stored separately so that the .import files can be version controlled.
-		{
+		if (!artifact_store) {
 			Ref<FileAccess> md5s = FileAccess::open(base_path + ".md5", FileAccess::WRITE);
 			ERR_FAIL_COND_V_MSG(md5s.is_null(), ERR_FILE_CANT_OPEN, "Cannot open MD5 file '" + base_path + ".md5'.");
 
@@ -2932,7 +2941,14 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	List<String> import_variants;
 	List<String> gen_files;
 	Variant meta;
-	Error err = importer->import(uid, p_file, base_path, params, &import_variants, &gen_files, &meta);
+	Error err = OK;
+	EditorImportArtifactStore *artifact_store = EditorImportArtifactStore::get_singleton();
+	if (!artifact_store || !artifact_store->fetch_import(p_file, importer, params, uid, generator_parameters, import_variants, gen_files, meta)) {
+		err = importer->import(uid, p_file, base_path, params, &import_variants, &gen_files, &meta);
+		if (artifact_store) {
+			artifact_store->store_import(p_file, importer, params, uid, generator_parameters, import_variants, gen_files, meta, err);
+		}
+	}
 
 	// As import is complete, save the .import file.
 
@@ -2966,20 +2982,25 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 				for (const String &E : import_variants) {
 					String path = base_path.c_escape() + "." + E + "." + importer->get_save_extension();
 
-					f->store_line("path." + E + "=\"" + path + "\"");
+					if (!artifact_store) {
+						f->store_line("path." + E + "=\"" + path + "\"");
+					}
 					dest_paths.push_back(path);
 				}
 			} else {
 				String path = base_path + "." + importer->get_save_extension();
-				f->store_line("path=\"" + path + "\"");
+				if (!artifact_store) {
+					f->store_line("path=\"" + path + "\"");
+				}
 				dest_paths.push_back(path);
 			}
 
-		} else {
+		} else if (!artifact_store) {
 			f->store_line("valid=false");
 		}
 
-		if (meta != Variant()) {
+		// With an artifact store, import results are provided by the store instead.
+		if (meta != Variant() && !artifact_store) {
 			String value;
 			VariantWriter::write_to_string(meta, value, true);
 			f->store_line("metadata=" + value);
@@ -3002,15 +3023,17 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 				dest_paths.push_back(E);
 			}
 
-			String value;
-			VariantWriter::write_to_string(genf, value, true);
-			f->store_line("files=" + value);
-			f->store_line("");
+			if (!artifact_store) {
+				String value;
+				VariantWriter::write_to_string(genf, value, true);
+				f->store_line("files=" + value);
+				f->store_line("");
+			}
 		}
 
 		f->store_line("source_file=" + Variant(p_file).get_construct_string());
 
-		if (dest_paths.size()) {
+		if (dest_paths.size() && !artifact_store) {
 			Array dp;
 			for (int i = 0; i < dest_paths.size(); i++) {
 				dp.push_back(dest_paths[i]);
@@ -3033,7 +3056,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	}
 
 	// Store the md5's of the various files. These are stored separately so that the .import files can be version controlled.
-	{
+	if (!artifact_store) {
 		Ref<FileAccess> md5s = FileAccess::open(base_path + ".md5", FileAccess::WRITE);
 		ERR_FAIL_COND_V_MSG(md5s.is_null(), ERR_FILE_CANT_OPEN, "Cannot open MD5 file '" + base_path + ".md5'.");
 
