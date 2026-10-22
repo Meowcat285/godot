@@ -100,8 +100,13 @@ class Packager:
                     f"windows-template-mono{suffix}", f"godot.windows.template_{target}.x86_64.mono.console.exe"
                 ),
             )
+            # Mono Android builds are named `android_mono<Target>.apk` by Gradle, but the editor expects
+            # the same names as non-Mono builds in the export templates.
             android_artifact = "android-template-mono-arm64" + ("-release" if target == "release" else "")
-            add(f"android_{target}.apk", self.artifact_file(android_artifact, f"android_{target}.apk"))
+            add(
+                f"android_{target}.apk",
+                self.artifact_file(android_artifact, f"android_mono{target.capitalize()}.apk"),
+            )
 
         add("macos.zip", self.package_macos_templates())
         add("ios.zip", self.package_ios_templates())
@@ -166,6 +171,16 @@ class Packager:
         for dest, src in libs.items():
             shutil.copy(src, xcode_dir / dest)
 
+        # The libraries are statically linked against AccessKit when it's enabled, so the Xcode project
+        # needs its framework too. The editor detects it in the template and adds it to the exported project.
+        for artifact in ["ios-template-mono", "ios-template-mono-debug"]:
+            accesskit = self.artifacts / artifact / "build_deps" / "accesskit" / "lib" / "ios" / "AccessKit.xcframework"
+            if accesskit.is_dir():
+                shutil.copytree(accesskit, xcode_dir / "AccessKit.xcframework")
+                break
+        else:
+            warn('"AccessKit.xcframework" not found in iOS artifacts, skipping.')
+
         out = self.work / "ios.zip"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
             add_tree(zf, xcode_dir, "")
@@ -210,6 +225,10 @@ class Packager:
         if not artifact_dir.is_dir():
             warn(f'Artifact "{artifact}" not found, skipping.')
             return None
+
+        for exe in executables:
+            if not (artifact_dir / exe).is_file():
+                warn(f'"{exe}" not found in artifact "{artifact}".')
 
         name = f"{self.base_name}_{platform}"
         out = self.output / f"{name}.zip"
