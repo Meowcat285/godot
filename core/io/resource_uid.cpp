@@ -34,6 +34,7 @@
 #include "core/crypto/crypto_core.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/file_access_pack.h"
 #include "core/io/resource_loader.h"
 #include "core/io/stream_peer.h"
 #include "core/math/random_pcg.h"
@@ -314,6 +315,20 @@ Error ResourceUID::save_to_cache() {
 }
 
 Error ResourceUID::load_from_cache(bool p_reset) {
+	Error err = _load_from_cache_file(p_reset);
+
+	// Packs may carry their own UID tables (e.g. GCAS), which take priority over the cache file.
+	PackedData *packed_data = PackedData::get_singleton();
+	if (packed_data && !packed_data->is_disabled()) {
+		if (err == ERR_CANT_OPEN && p_reset) {
+			clear();
+		}
+		packed_data->register_pack_uids();
+	}
+	return err;
+}
+
+Error ResourceUID::_load_from_cache_file(bool p_reset) {
 	Ref<FileAccess> f = FileAccess::open(get_cache_file(), FileAccess::READ);
 	if (f.is_null()) {
 		return ERR_CANT_OPEN;

@@ -31,6 +31,7 @@
 #include "file_access_pack.h"
 
 #include "core/io/file_access_encrypted.h"
+#include "core/io/file_access_gcas.h"
 #include "core/io/file_access_patched.h"
 #include "core/object/script_language.h"
 #include "core/os/os.h"
@@ -186,12 +187,31 @@ void PackedData::clear() {
 	delta_patches.clear();
 	_free_packed_dirs(root);
 	root = memnew(PackedDir);
+	for (PackSource *source : sources) {
+		source->clear_packs();
+	}
+}
+
+void PackedData::register_pack_uids() {
+	List<Pair<ResourceUID::ID, String>> uids;
+	for (const PackSource *source : sources) {
+		source->get_uids(&uids);
+	}
+	for (const Pair<ResourceUID::ID, String> &E : uids) {
+		if (ResourceUID::get_singleton()->has_id(E.first)) {
+			ResourceUID::get_singleton()->set_id(E.first, E.second);
+		} else {
+			ResourceUID::get_singleton()->add_id(E.first, E.second);
+		}
+	}
 }
 
 PackedData::PackedData() {
 	singleton = this;
 	root = memnew(PackedDir);
 
+	// GCAS first, as it fails silently on non-GCAS files (the PCK source reports errors for unknown files loaded with an offset).
+	add_pack_source(memnew(PackedSourceGCAS));
 	add_pack_source(memnew(PackedSourcePCK));
 }
 

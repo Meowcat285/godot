@@ -114,6 +114,7 @@ class ProjectExportDialog : public ConfirmationDialog {
 
 	RBSet<String> feature_set;
 
+	OptionButton *pack_format = nullptr;
 	CheckButton *patch_delta_encoding = nullptr;
 	SpinBox *patch_delta_zstd_level = nullptr;
 	SpinBox *patch_delta_min_reduction = nullptr;
@@ -179,6 +180,7 @@ class ProjectExportDialog : public ConfirmationDialog {
 	void _set_file_export_mode(int p_id);
 
 	bool updating_patch_delta_filters = false;
+	void _pack_format_changed(int p_index);
 	void _patch_delta_encoding_changed(bool p_pressed);
 	void _patch_delta_include_filter_changed(const String &p_filter);
 	void _patch_delta_exclude_filter_changed(const String &p_filter);

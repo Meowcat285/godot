@@ -93,6 +93,19 @@ Patches:
 - `0006-explicit-includes.patch` ([GH-111557](https://github.com/godotengine/godot/pull/111557))
 
 
+## blake3
+
+- Upstream: https://github.com/BLAKE3-team/BLAKE3
+- Version: 1.8.2 (df610ddc3b93841ffc59a87e3da659a15910eb46, 2025)
+- License: CC0 1.0 or Apache 2.0 (or Apache 2.0 with LLVM exceptions)
+
+Files extracted from upstream source:
+
+- From `c/`: `blake3.{c,h}`, `blake3_dispatch.c`, `blake3_impl.h`, `blake3_portable.c`,
+  and the intrinsics implementations `blake3_{sse2,sse41,avx2,avx512,neon}.c`
+- `LICENSE_A2`, `LICENSE_A2LLVM`, `LICENSE_CC0`
+
+
 ## brotli
 
 - Upstream: https://github.com/google/brotli

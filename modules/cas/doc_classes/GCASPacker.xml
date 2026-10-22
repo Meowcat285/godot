@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GCASPacker" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Creates GCAS packages that can be loaded into a running project.
+	</brief_description>
+	<description>
+		The [GCASPacker] is used to create GCAS packages that can be loaded into a running project using [method ProjectSettings.load_resource_pack], like PCK packages created with [PCKPacker].
+		GCAS packages are content-addressed: files are split into chunks, identical chunks are only stored once, and each chunk is compressed independently, so files can still be read from any position (e.g. when streaming textures). A package can be a patch for other GCAS packages (see [method add_base_pack]), in which case it only contains the chunks that aren't in them.
+		[codeblocks]
+		[gdscript]
+		var packer = GCASPacker.new()
+		packer.start("user://dlc.gcas")
+		packer.add_file("res://text.txt", "text.txt")
+		packer.flush()
+		[/gdscript]
+		[csharp]
+		var packer = new GCASPacker();
+		packer.Start("user://dlc.gcas");
+		packer.AddFile("res://text.txt", "text.txt");
+		packer.Flush();
+		[/csharp]
+		[/codeblocks]
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="add_base_pack">
+			<return type="int" enum="Error" />
+			<param index="0" name="base_path" type="String" />
+			<description>
+				Makes the package a patch for the GCAS package at [param base_path]: chunks already stored in it are referenced instead of being stored again. The base package must be loaded before the patch.
+			</description>
+		</method>
+		<method name="add_export_layout_provider" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="provider" type="CASLayoutProvider" />
+			<description>
+				Registers a layout provider used when exporting projects to GCAS packages. Editor plugins can use it to control how the files they create are split into chunks.
+			</description>
+		</method>
+		<method name="add_file">
+			<return type="int" enum="Error" />
+			<param index="0" name="target_path" type="String" />
+			<param index="1" name="source_path" type="String" />
+			<param index="2" name="uid" type="int" default="-1" />
+			<description>
+				Adds the file at [param source_path] to the package, as [param target_path] (for example [code]res://folder/file.res[/code]). If [param uid] is valid, it is registered with [ResourceUID] when the package is loaded.
+			</description>
+		</method>
+		<method name="add_file_from_buffer">
+			<return type="int" enum="Error" />
+			<param index="0" name="target_path" type="String" />
+			<param index="1" name="data" type="PackedByteArray" />
+			<param index="2" name="uid" type="int" default="-1" />
+			<description>
+				Adds a file with the contents [param data] to the package, as [param target_path] (for example [code]res://folder/file.res[/code]). If [param uid] is valid, it is registered with [ResourceUID] when the package is loaded.
+			</description>
+		</method>
+		<method name="add_file_removal">
+			<return type="int" enum="Error" />
+			<param index="0" name="target_path" type="String" />
+			<description>
+				Registers the removal of [param target_path]: when the package is loaded, the file is removed from the packages loaded before it.
+			</description>
+		</method>
+		<method name="add_layout_provider">
+			<return type="void" />
+			<param index="0" name="provider" type="CASLayoutProvider" />
+			<description>
+				Adds a layout provider, used to split the files it handles into chunks (for example at the boundaries of the data read by streaming).
+			</description>
+		</method>
+		<method name="flush">
+			<return type="int" enum="Error" />
+			<description>
+				Writes the package. Must be called after adding all the files.
+			</description>
+		</method>
+		<method name="remove_export_layout_provider" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="provider" type="CASLayoutProvider" />
+			<description>
+				Removes a layout provider registered with [method add_export_layout_provider].
+			</description>
+		</method>
+		<method name="start">
+			<return type="int" enum="Error" />
+			<param index="0" name="path" type="String" />
+			<param index="1" name="compression_level" type="int" default="19" />
+			<description>
+				Starts writing a package to [param path]. [param compression_level] is the Zstandard compression level used for chunks (from [code]1[/code] to [code]22[/code]), which only affects the time it takes to create the package, not the time it takes to read it.
+			</description>
+		</method>
+	</methods>
+</class>

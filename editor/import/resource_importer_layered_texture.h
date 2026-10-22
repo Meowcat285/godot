@@ -96,6 +96,9 @@ public:
 	virtual String get_visible_name() const override;
 	virtual void get_recognized_extensions(List<String> *p_extensions) const override;
 	virtual String get_save_extension() const override;
+	// Imported results only depend on the source contents and options.
+	virtual bool is_import_path_independent() const override { return true; }
+	virtual bool can_share_import_cache() const override { return true; }
 	virtual String get_resource_type() const override;
 
 	enum CompressMode {

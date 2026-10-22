@@ -209,6 +209,37 @@ if env["builtin_zstd"]:
     env_thirdparty.add_source_files(thirdparty_obj, thirdparty_zstd_sources)
 
 
+# BLAKE3 library, used for content-addressed storage (GCAS packs, import cache).
+thirdparty_blake3_dir = "#thirdparty/blake3/"
+thirdparty_blake3_sources = ["blake3.c", "blake3_dispatch.c", "blake3_portable.c"]
+thirdparty_blake3_sources = [thirdparty_blake3_dir + file for file in thirdparty_blake3_sources]
+
+env_blake3 = env_thirdparty.Clone()
+env_blake3.Prepend(CPPPATH=[thirdparty_blake3_dir])
+
+if env["arch"] == "x86_64":
+    # SIMD implementations are selected at runtime, each file only needs its own instruction set enabled.
+    blake3_simd_flags = {
+        "blake3_sse2.c": [] if env.msvc else ["-msse2"],
+        "blake3_sse41.c": [] if env.msvc else ["-msse4.1"],
+        "blake3_avx2.c": ["/arch:AVX2"] if env.msvc else ["-mavx2"],
+        "blake3_avx512.c": ["/arch:AVX512"] if env.msvc else ["-mavx512f", "-mavx512vl"],
+    }
+    for file, flags in blake3_simd_flags.items():
+        env_blake3_simd = env_blake3.Clone()
+        env_blake3_simd.Append(CCFLAGS=flags)
+        env_blake3_simd.add_source_files(thirdparty_obj, thirdparty_blake3_dir + file)
+else:
+    env_blake3.Append(CPPDEFINES=["BLAKE3_NO_SSE2", "BLAKE3_NO_SSE41", "BLAKE3_NO_AVX2", "BLAKE3_NO_AVX512"])
+    if env["arch"] == "arm64":
+        thirdparty_blake3_sources.append(thirdparty_blake3_dir + "blake3_neon.c")
+    else:
+        env_blake3.Append(CPPDEFINES=[("BLAKE3_USE_NEON", 0)])
+
+env_blake3.add_source_files(thirdparty_obj, thirdparty_blake3_sources)
+env.Prepend(CPPPATH=[thirdparty_blake3_dir])
+
+
 env.core_sources += thirdparty_obj
 
 

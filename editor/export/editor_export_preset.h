@@ -60,9 +60,15 @@ public:
 		MODE_SCRIPT_BINARY_TOKENS_COMPRESSED,
 	};
 
+	enum PackFormat {
+		PACK_FORMAT_PCK,
+		PACK_FORMAT_GCAS,
+	};
+
 private:
 	Ref<EditorExportPlatform> platform;
 	ExportFilter export_filter = EXPORT_ALL_RESOURCES;
+	PackFormat pack_format = PACK_FORMAT_GCAS; // Presets saved without a pack format use PCK.
 	String include_filter;
 	String exclude_filter;
 	String export_path;
@@ -205,6 +211,9 @@ public:
 	void set_seed(uint64_t p_seed);
 	uint64_t get_seed() const;
 
+	void set_pack_format(PackFormat p_format);
+	PackFormat get_pack_format() const;
+
 	void set_enc_pck(bool p_enabled);
 	bool get_enc_pck() const;
 
@@ -237,3 +246,4 @@ public:
 VARIANT_ENUM_CAST(EditorExportPreset::ExportFilter);
 VARIANT_ENUM_CAST(EditorExportPreset::FileExportMode);
 VARIANT_ENUM_CAST(EditorExportPreset::ScriptExportMode);
+VARIANT_ENUM_CAST(EditorExportPreset::PackFormat);

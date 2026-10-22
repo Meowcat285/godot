@@ -690,6 +690,11 @@ void ProjectSettings::_handle_editor_setting_compat(const String &p_original_set
  *    If a project file is found, load it or fail.
  *    If nothing was found, error out.
  */
+bool ProjectSettings::_load_main_pack_candidate(const String &p_base_path) {
+	// GCAS packs take priority over PCK packs with the same name.
+	return _load_resource_pack(p_base_path + ".gcas", false, 0, true) || _load_resource_pack(p_base_path + ".pck", false, 0, true);
+}
+
 Error ProjectSettings::_setup(const String &p_path, const String &p_main_pack, bool p_upwards, bool p_ignore_override) {
 	if (!OS::get_singleton()->get_resource_dir().is_empty()) {
 		// OS will call ProjectSettings->get_resource_path which will be empty if not overridden!
@@ -743,20 +748,20 @@ Error ProjectSettings::_setup(const String &p_path, const String &p_main_pack, b
 #if defined(MACOS_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
 		if (!found) {
 			// Attempt to load PCK from macOS .app bundle resources.
-			found = _load_resource_pack(OS::get_singleton()->get_bundle_resource_dir().path_join(exec_basename + ".pck"), false, 0, true) || _load_resource_pack(OS::get_singleton()->get_bundle_resource_dir().path_join(exec_filename + ".pck"), false, 0, true);
+			found = _load_main_pack_candidate(OS::get_singleton()->get_bundle_resource_dir().path_join(exec_basename)) || _load_main_pack_candidate(OS::get_singleton()->get_bundle_resource_dir().path_join(exec_filename));
 		}
 #endif
 
 		if (!found) {
 			// Try to load data pack at the location of the executable.
 			// As mentioned above, we have two potential names to attempt.
-			found = _load_resource_pack(exec_dir.path_join(exec_basename + ".pck"), false, 0, true) || _load_resource_pack(exec_dir.path_join(exec_filename + ".pck"), false, 0, true);
+			found = _load_main_pack_candidate(exec_dir.path_join(exec_basename)) || _load_main_pack_candidate(exec_dir.path_join(exec_filename));
 		}
 
 		if (!found) {
 			// If we couldn't find them next to the executable, we attempt
 			// the current working directory. Same story, two tests.
-			found = _load_resource_pack(exec_basename + ".pck", false, 0, true) || _load_resource_pack(exec_filename + ".pck", false, 0, true);
+			found = _load_main_pack_candidate(exec_basename) || _load_main_pack_candidate(exec_filename);
 		}
 
 		// If we opened our package, try and load our project.
@@ -1814,6 +1819,7 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "compression/formats/zstd/long_distance_matching"), Compression::zstd_long_distance_matching);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "compression/formats/zstd/compression_level", PROPERTY_HINT_RANGE, "1,22,1"), Compression::zstd_level);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "compression/formats/zstd/window_log_size", PROPERTY_HINT_RANGE, "10,30,1"), Compression::zstd_window_log_size);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "file_access/gcas/chunk_cache_size_mb", PROPERTY_HINT_RANGE, "0,1024,1,or_greater,suffix:MiB"), 16);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "compression/formats/zlib/compression_level", PROPERTY_HINT_RANGE, "-1,9,1"), Compression::zlib_level);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "compression/formats/gzip/compression_level", PROPERTY_HINT_RANGE, "-1,9,1"), Compression::gzip_level);
 

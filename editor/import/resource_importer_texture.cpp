@@ -1061,7 +1061,8 @@ bool ResourceImporterTexture::are_import_settings_valid(const String &p_path, co
 			return false;
 		}
 
-		String editor_meta_path = imported_path.replace(".editor.ctex", ".editor.meta");
+		// Resolved from the import base path, as imported files may be stored under content-addressed names.
+		String editor_meta_path = ResourceFormatImporter::resolve_artifact_path(ResourceFormatImporter::get_singleton()->get_import_base_path(p_path) + ".editor.meta");
 		Dictionary editor_meta = _load_editor_meta(editor_meta_path);
 
 		if (editor_meta.has("editor_scale") && (float)editor_meta["editor_scale"] != EDSCALE) {

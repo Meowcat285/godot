@@ -35,7 +35,14 @@
 #include "core/config/engine.h"
 #include "core/object/class_db.h"
 
+#include "modules/modules_enabled.gen.h" // For cas.
 #include "modules/register_module_types.h"
+
+#if defined(TOOLS_ENABLED) && defined(MODULE_CAS_ENABLED)
+#include "streamed_texture_layout_provider.h"
+
+#include "modules/cas/gcas_packer.h"
+#endif
 
 static TextureStreaming *_texture_streaming_server = nullptr;
 
@@ -50,6 +57,12 @@ void initialize_texture_streaming_module(ModuleInitializationLevel p_level) {
 		_texture_streaming_server = memnew(TextureStreaming);
 		Engine::get_singleton()->add_singleton(Engine::Singleton("TextureStreaming", TextureStreaming::get_singleton()));
 	}
+
+#if defined(TOOLS_ENABLED) && defined(MODULE_CAS_ENABLED)
+	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+		GCASPacker::add_export_layout_provider(memnew(StreamedTextureLayoutProvider));
+	}
+#endif
 }
 
 void uninitialize_texture_streaming_module(ModuleInitializationLevel p_level) {

@@ -113,6 +113,7 @@ void EditorExportPreset::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_export_path"), &EditorExportPreset::get_export_path);
 	ClassDB::bind_method(D_METHOD("get_encryption_in_filter"), &EditorExportPreset::get_enc_in_filters_str);
 	ClassDB::bind_method(D_METHOD("get_encryption_ex_filter"), &EditorExportPreset::get_enc_ex_filters_str);
+	ClassDB::bind_method(D_METHOD("get_pack_format"), &EditorExportPreset::get_pack_format);
 	ClassDB::bind_method(D_METHOD("get_encrypt_pck"), &EditorExportPreset::get_enc_pck);
 	ClassDB::bind_method(D_METHOD("get_encrypt_directory"), &EditorExportPreset::get_enc_directory);
 	ClassDB::bind_method(D_METHOD("get_encryption_key"), &EditorExportPreset::get_script_encryption_key);
@@ -136,6 +137,9 @@ void EditorExportPreset::_bind_methods() {
 	BIND_ENUM_CONSTANT(MODE_SCRIPT_TEXT);
 	BIND_ENUM_CONSTANT(MODE_SCRIPT_BINARY_TOKENS);
 	BIND_ENUM_CONSTANT(MODE_SCRIPT_BINARY_TOKENS_COMPRESSED);
+
+	BIND_ENUM_CONSTANT(PACK_FORMAT_PCK);
+	BIND_ENUM_CONSTANT(PACK_FORMAT_GCAS);
 }
 
 String EditorExportPreset::_get_property_warning(const StringName &p_name) const {
@@ -569,6 +573,15 @@ void EditorExportPreset::set_seed(uint64_t p_seed) {
 
 uint64_t EditorExportPreset::get_seed() const {
 	return seed;
+}
+
+void EditorExportPreset::set_pack_format(PackFormat p_format) {
+	pack_format = p_format;
+	EditorExport::singleton->save_presets();
+}
+
+EditorExportPreset::PackFormat EditorExportPreset::get_pack_format() const {
+	return pack_format;
 }
 
 void EditorExportPreset::set_enc_pck(bool p_enabled) {

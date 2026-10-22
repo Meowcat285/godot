@@ -342,6 +342,13 @@ public:
 	Error save_zip(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, Vector<SharedObject> *p_so_files = nullptr, SaveFileFunction p_save_func = nullptr);
 
 	Error save_pack_patch(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, Vector<SharedObject> *p_so_files = nullptr, bool p_embed = false, int64_t *r_embedded_start = nullptr, int64_t *r_embedded_size = nullptr);
+
+	// GCAS pack writer, registered by the CAS module.
+	typedef Error (*SaveGCASFunction)(EditorExportPlatform *p_platform, const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, Vector<SharedObject> *p_so_files, bool p_patch, bool p_embed, int64_t *r_embedded_start, int64_t *r_embedded_size);
+	static inline SaveGCASFunction save_gcas_function = nullptr;
+	// GCAS is used for paths ending in ".gcas", and for other paths (e.g. executables to embed in) when the preset uses it.
+	static bool uses_gcas(const Ref<EditorExportPreset> &p_preset, const String &p_path = String());
+	static String get_pack_extension(const Ref<EditorExportPreset> &p_preset);
 	Error save_zip_patch(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, Vector<SharedObject> *p_so_files = nullptr);
 
 	virtual bool poll_export() { return false; }

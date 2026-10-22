@@ -149,6 +149,7 @@ void EditorExportPlatformWeb::_fix_html(Vector<uint8_t> &p_html, const Ref<Edito
 	config["focusCanvas"] = p_preset->get("html/focus_canvas_on_start");
 	config["gdextensionLibs"] = libs;
 	config["executable"] = p_name;
+	config["mainPack"] = p_name + get_pack_extension(p_preset);
 	config["args"] = args;
 	config["fileSizes"] = p_file_sizes;
 	config["ensureCrossOriginIsolationHeaders"] = (bool)p_preset->get("progressive_web_app/ensure_cross_origin_isolation_headers");
@@ -261,7 +262,7 @@ Error EditorExportPlatformWeb::_build_pwa(const Ref<EditorExportPreset> &p_prese
 	// Heavy files that are cached on demand.
 	Array opt_cache_files = {
 		name + ".wasm",
-		name + ".pck"
+		name + get_pack_extension(p_preset)
 	};
 	if (extensions) {
 		opt_cache_files.push_back(name + ".side.wasm");
@@ -524,7 +525,7 @@ Error EditorExportPlatformWeb::export_project(const Ref<EditorExportPreset> &p_p
 
 	// Export pck and shared objects
 	Vector<SharedObject> shared_objects;
-	String pck_path = base_path + ".pck";
+	String pck_path = base_path + get_pack_extension(p_preset);
 	Error error = save_pack(p_preset, p_debug, pck_path, &shared_objects);
 	if (error != OK) {
 		add_message(EXPORT_MESSAGE_ERROR, TTR("Export"), vformat(TTR("Could not write file: \"%s\"."), pck_path));
@@ -861,6 +862,7 @@ Error EditorExportPlatformWeb::_export_project(const Ref<EditorExportPreset> &p_
 		DirAccess::remove_file_or_error(basepath + ".audio.position.worklet.js");
 		DirAccess::remove_file_or_error(basepath + ".service.worker.js");
 		DirAccess::remove_file_or_error(basepath + ".pck");
+		DirAccess::remove_file_or_error(basepath + ".gcas");
 		DirAccess::remove_file_or_error(basepath + ".png");
 		DirAccess::remove_file_or_error(basepath + ".side.wasm");
 		DirAccess::remove_file_or_error(basepath + ".wasm");

@@ -38,6 +38,18 @@ class ResourceFormatImporter;
 
 typedef Ref<Resource> (*ResourceFormatImporterLoadOnStartup)(ResourceFormatImporter *p_importer, const String &p_path, Error *r_error, bool p_use_sub_threads, float *r_progress, ResourceFormatLoader::CacheMode p_cache_mode);
 
+// Optional storage for imported artifacts outside of `.godot/imported` (e.g. a content-addressed store).
+class ResourceImportArtifactProvider {
+public:
+	// Returns the contents of `p_source_path + ".import"` with the artifact-derived `[remap]` keys
+	// (`path*`, `metadata`, `valid`) merged in, or a null reference to read the `.import` file as is.
+	virtual Ref<FileAccess> open_import_file(const String &p_source_path, Error *r_error) = 0;
+	// Maps a logical artifact path (import base path + suffix) to the file that stores it.
+	virtual String resolve_artifact_path(const String &p_logical_path) = 0;
+
+	virtual ~ResourceImportArtifactProvider() {}
+};
+
 class ResourceFormatImporter : public ResourceFormatLoader {
 	GDSOFTCLASS(ResourceFormatImporter, ResourceFormatLoader);
 
@@ -62,6 +74,13 @@ class ResourceFormatImporter : public ResourceFormatLoader {
 	Vector<Ref<ResourceImporter>> importers;
 
 public:
+	static inline ResourceImportArtifactProvider *artifact_provider = nullptr;
+
+	// Opens the `.import` file of p_path (through the artifact provider, if any).
+	static Ref<FileAccess> open_import_file(const String &p_path, Error *r_error = nullptr);
+	// Maps a logical artifact path (import base path + suffix) to the file that stores it.
+	static String resolve_artifact_path(const String &p_logical_path) { return artifact_provider ? artifact_provider->resolve_artifact_path(p_logical_path) : p_logical_path; }
+
 	static ResourceFormatImporter *get_singleton() { return singleton; }
 	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE) override;
 	Ref<Resource> load_internal(const String &p_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode, bool p_silence_errors);
@@ -162,6 +181,11 @@ public:
 	virtual Error import_group_file(const String &p_group_file, const HashMap<String, HashMap<StringName, Variant>> &p_source_file_options, const HashMap<String, String> &p_base_paths) { return ERR_UNAVAILABLE; }
 	virtual bool are_import_settings_valid(const String &p_path, const Dictionary &p_meta) const { return true; }
 	virtual String get_import_settings_string() const { return String(); }
+	// True if the imported result only depends on the source file contents and options (not its path or UID),
+	// which allows identical source files to share imported artifacts.
+	virtual bool is_import_path_independent() const { return false; }
+	// True if imported artifacts may be shared with other machines through a shared import cache.
+	virtual bool can_share_import_cache() const { return false; }
 
 	virtual void get_build_dependencies(const String &p_path, HashSet<String> *r_build_dependencies);
 };

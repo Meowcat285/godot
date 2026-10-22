@@ -65,6 +65,8 @@ private:
 	bool changed = false;
 	bool cache_initialized = false;
 
+	Error _load_from_cache_file(bool p_reset);
+
 protected:
 	static void _bind_methods();
 

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="CASLocalDirectoryBackend" inherits="CASBackend" api_type="editor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Shared import cache in a directory.
+	</brief_description>
+	<description>
+		A [CASBackend] storing import results in a directory, for example on a network drive shared by a team. The editor uses one automatically when [code]editor/import/cas/shared_cache_directory[/code] is set in the editor settings.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="set_writable">
+			<return type="void" />
+			<param index="0" name="writable" type="bool" />
+			<description>
+				If [param writable] is [code]false[/code], import results are only read from the directory.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="path" type="String" setter="set_path" getter="get_path" default="&quot;&quot;">
+			The directory where import results are stored.
+		</member>
+	</members>
+</class>
