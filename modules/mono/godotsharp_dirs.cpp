@@ -156,12 +156,12 @@ private:
 		mono_user_dir = _get_mono_user_dir();
 #endif
 
-		String exe_dir = OS::get_singleton()->get_executable_path().get_base_dir();
 #ifdef MACOS_ENABLED
 		String res_dir = OS::get_singleton()->get_bundle_resource_dir();
 #endif
 
 #ifdef TOOLS_ENABLED
+		String exe_dir = OS::get_singleton()->get_executable_path().get_base_dir();
 		String data_dir_root = exe_dir.path_join("GodotSharp");
 		data_editor_tools_dir = data_dir_root.path_join("Tools");
 		String api_assemblies_base_dir = data_dir_root.path_join("Api");
@@ -176,14 +176,14 @@ private:
 #endif
 		api_assemblies_dir = api_assemblies_base_dir.path_join(GDMono::get_expected_api_build_config());
 #else // TOOLS_ENABLED
-		String platform = _get_platform_name();
 		String arch = Engine::get_singleton()->get_architecture_name();
-		String appname_safe = Path::get_csharp_project_name();
 		String packed_path = "res://.godot/mono/publish/" + arch;
 #ifdef ANDROID_ENABLED
 		api_assemblies_dir = packed_path;
 		print_verbose(".NET: Android platform detected. Setting api_assemblies_dir directly to pck path: " + api_assemblies_dir);
 #else
+		String platform = _get_platform_name();
+		String appname_safe = Path::get_csharp_project_name();
 		if (DirAccess::exists(packed_path)) {
 			// The dotnet publish data is packed in the pck/zip.
 			String data_dir_root = OS::get_singleton()->get_cache_path().path_join("data_" + appname_safe + "_" + platform + "_" + arch);
@@ -221,6 +221,7 @@ private:
 			api_assemblies_dir = data_dir_root;
 		} else {
 			// The dotnet publish data is in a directory next to the executable.
+			String exe_dir = OS::get_singleton()->get_executable_path().get_base_dir();
 			String data_dir_root = exe_dir.path_join("data_" + appname_safe + "_" + platform + "_" + arch);
 #ifdef MACOS_ENABLED
 			if (!DirAccess::exists(data_dir_root)) {
