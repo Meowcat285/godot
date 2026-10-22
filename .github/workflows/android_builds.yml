@@ -22,25 +22,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Editor (target=editor)
-            cache-name: android-editor
-            target: editor
-            instrumented_tests: true
-            scons-flags: >-
-              arch=arm64
-              production=yes
-
-          - name: Template arm32 (target=template_debug, arch=arm32)
-            cache-name: android-template-arm32
+          # Mono is only supported for Android export templates, not the Android editor.
+          - name: Template w/ Mono arm32 (target=template_debug, arch=arm32)
+            cache-name: android-template-mono-arm32
             target: template_debug
             instrumented_tests: false
-            scons-flags: arch=arm32
+            scons-flags: arch=arm32 module_mono_enabled=yes
 
-          - name: Template arm64 (target=template_debug, arch=arm64)
-            cache-name: android-template-arm64
+          - name: Template w/ Mono arm64 (target=template_debug, arch=arm64)
+            cache-name: android-template-mono-arm64
             target: template_debug
             instrumented_tests: true
-            scons-flags: arch=arm64
+            scons-flags: arch=arm64 module_mono_enabled=yes
 
     steps:
       - name: Checkout
@@ -113,7 +106,7 @@ jobs:
         if: matrix.target == 'template_debug'
         run: |
           cd platform/android/java
-          ./gradlew generateGodotTemplates
+          ./gradlew generateGodotMonoTemplates
           cd ../../..
           ls -l bin/
 

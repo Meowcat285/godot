@@ -14,7 +14,7 @@ jobs:
   ios-template:
     # From https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#choosing-github-hosted-runners
     runs-on: macos-26
-    name: Template (target=template_release)
+    name: Template w/ Mono (target=template_release)
     timeout-minutes: 60
 
     steps:
@@ -44,7 +44,7 @@ jobs:
       - name: Compilation (arm64)
         uses: ./.github/actions/godot-build
         with:
-          scons-flags: ${{ env.SCONS_FLAGS }} accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }}
+          scons-flags: ${{ env.SCONS_FLAGS }} module_mono_enabled=yes accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }}
           platform: ios
           target: template_release
 

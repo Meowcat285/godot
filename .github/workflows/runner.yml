@@ -14,6 +14,7 @@ jobs:
     uses: ./.github/workflows/static_checks.yml
 
   # Second stage: Run all the builds and some of the tests.
+  # Only Mono (C#) builds are run. Web is skipped since Mono doesn't support it.
 
   android-build:
     name: 🤖 Android
@@ -48,9 +49,3 @@ jobs:
     needs: static-checks
     if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
     uses: ./.github/workflows/windows_builds.yml
-
-  web-build:
-    name: 🌐 Web
-    needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
-    uses: ./.github/workflows/web_builds.yml
