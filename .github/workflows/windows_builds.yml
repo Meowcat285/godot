@@ -27,12 +27,13 @@ jobs:
           - name: Editor w/ Mono (target=editor)
             cache-name: windows-editor-mono
             target: editor
+            # Built with the GUI subsystem (the default) so that a console wrapper is also generated,
+            # like official releases. The console wrapper is used to run the tests.
             scons-flags: >-
-              windows_subsystem=console
               vsproj=yes
               vsproj_gen_only=no
               module_mono_enabled=yes
-            bin: ./bin/godot.windows.editor.x86_64.mono.exe
+            bin: ./bin/godot.windows.editor.x86_64.mono.console.exe
             compiler: msvc
             build-mono: true
 
