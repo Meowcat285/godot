@@ -219,7 +219,7 @@ def write_full(new_path: Path, out_path: Path) -> int:
 def quick_full_size(new_path: Path) -> int:
     """Size of the file compressed at a fast level, which `ZSTD_LEVEL` can't make several times smaller."""
     with open(new_path, "rb") as fin, open(os.devnull, "wb") as null:
-        return zstandard.ZstdCompressor(level=QUICK_LEVEL).copy_stream(fin, null)[1]
+        return int(zstandard.ZstdCompressor(level=QUICK_LEVEL).copy_stream(fin, null)[1])
 
 
 def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int) -> tuple[str, Path]:
