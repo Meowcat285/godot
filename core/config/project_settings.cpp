@@ -679,7 +679,7 @@ void ProjectSettings::_handle_editor_setting_compat(const String &p_original_set
  *      appending '.pck' to the binary name (e.g. 'linux_game' -> 'linux_game.pck').
  *    o PCK with the same basename as the binary in the current working directory.
  *      Same as above for the two possible PCK file names.
- *  - On Android, look for 'assets.sparsepck' and try loading it, if it doesn't work,
+ *  - On Android, look for 'assets.gcas' or 'assets.sparsepck' and try loading it, if it doesn't work,
  *    proceed to the next step.
  *  - On relevant platforms (Android/iOS), lookup project file in OS resource path.
  *    If found, load it or fail.
@@ -783,8 +783,10 @@ Error ProjectSettings::_setup(const String &p_path, const String &p_main_pack, b
 	}
 
 #ifdef ANDROID_ENABLED
-	// Attempt to load sparse PCK assets.
-	_load_resource_pack("res://assets.sparsepck", false, 0, true);
+	// Attempt to load GCAS or sparse PCK assets.
+	if (!_load_resource_pack("res://assets.gcas", false, 0, true)) {
+		_load_resource_pack("res://assets.sparsepck", false, 0, true);
+	}
 #endif
 
 	// Try to use the filesystem for files, according to OS.

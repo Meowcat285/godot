@@ -852,6 +852,41 @@ Error EditorExportPlatformAndroid::save_apk_file(const Ref<EditorExportPreset> &
 	return OK;
 }
 
+bool EditorExportPlatformAndroid::_uses_gcas(const Ref<EditorExportPreset> &p_preset) {
+	// GCAS packs aren't encrypted, so encrypted exports keep using sparse PCK.
+	return uses_gcas(p_preset) && !p_preset->get_enc_pck();
+}
+
+Error EditorExportPlatformAndroid::_store_gcas_in_apk(const Ref<EditorExportPreset> &p_preset, bool p_debug, APKExportData *ed) {
+	const String tmp_path = EditorPaths::get_singleton()->get_temp_dir().path_join("assets.gcas");
+	Vector<SharedObject> so_files;
+	Error err = save_pack(p_preset, p_debug, tmp_path, &so_files);
+	for (int i = 0; err == OK && i < so_files.size(); i++) {
+		err = save_apk_so(p_preset, ed, so_files[i]);
+	}
+
+	Ref<FileAccess> f;
+	if (err == OK) {
+		f = FileAccess::open(tmp_path, FileAccess::READ, &err);
+	}
+	if (f.is_valid()) {
+		// Stored uncompressed so that chunks can be read at any offset.
+		zip_fileinfo zipfi = get_zip_fileinfo();
+		zipOpenNewFileInZip(ed->apk, "assets/assets.gcas", &zipfi, nullptr, 0, nullptr, 0, nullptr, 0, Z_DEFAULT_COMPRESSION);
+		Vector<uint8_t> buffer;
+		buffer.resize_uninitialized(1024 * 1024);
+		uint64_t read = 0;
+		while ((read = f->get_buffer(buffer.ptrw(), buffer.size())) > 0) {
+			zipWriteInFileInZip(ed->apk, buffer.ptr(), read);
+		}
+		zipCloseFileInZip(ed->apk);
+		f.unref();
+	}
+
+	DirAccess::remove_file_or_error(tmp_path);
+	return err;
+}
+
 Error EditorExportPlatformAndroid::ignore_apk_file(const Ref<EditorExportPreset> &p_preset, void *p_userdata, const SaveFileInfo &p_info, const Vector<uint8_t> &p_data) {
 	return OK;
 }
@@ -3633,6 +3668,13 @@ Error EditorExportPlatformAndroid::export_project_helper(const Ref<EditorExportP
 		user_data.debug = p_debug;
 		if (p_flags.has_flag(DEBUG_FLAG_DUMB_CLIENT)) {
 			err = export_project_files(p_preset, p_debug, ignore_apk_file, nullptr, &user_data, copy_gradle_so);
+		} else if (_uses_gcas(p_preset)) {
+			DirAccess::make_dir_recursive_absolute(assets_directory);
+			Vector<SharedObject> so_files;
+			err = save_pack(p_preset, p_debug, assets_directory.path_join("assets.gcas"), &so_files);
+			for (int i = 0; err == OK && i < so_files.size(); i++) {
+				err = copy_gradle_so(p_preset, &user_data, so_files[i]);
+			}
 		} else {
 			user_data.pd.path = "assets.sparsepck";
 			user_data.pd.use_sparse_pck = true;
@@ -4173,6 +4215,11 @@ Error EditorExportPlatformAndroid::export_project_helper(const Ref<EditorExportP
 		ed.ep = &ep;
 		ed.apk = unaligned_apk;
 		err = export_project_files(p_preset, p_debug, ignore_apk_file, nullptr, &ed, save_apk_so);
+	} else if (_uses_gcas(p_preset)) {
+		APKExportData ed;
+		ed.ep = &ep;
+		ed.apk = unaligned_apk;
+		err = _store_gcas_in_apk(p_preset, p_debug, &ed);
 	} else {
 		APKExportData ed;
 		ed.ep = &ep;
