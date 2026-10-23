@@ -17,8 +17,11 @@ on:
         type: number
         default: 2
 
+# One group per release: a single group would keep only one pending run, canceling older pending ones,
+# and the releases they were for would never get deltas. Runs for different releases don't share assets.
+# A release that still misses its deltas can be backfilled by running this workflow by hand with its tag.
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ inputs.tag || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 # Generates the delta patches used by Meow Godot Launcher (https://github.com/Meowcat285/meow-godot-launcher)
@@ -70,7 +73,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
           HISTORY: ${{ inputs.history || 2 }}
         run: |
-          python -m pip install bsdiff4 zstandard
+          python -m pip install --require-hashes --only-binary :all: -r misc/scripts/delta_requirements.txt
           python misc/scripts/generate_delta_patches.py \
             --tag "${TAG}" \
             --history "${HISTORY}" \
