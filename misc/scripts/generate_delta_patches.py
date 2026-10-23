@@ -10,6 +10,7 @@ if __name__ != "__main__":
 # - `meow-launcher-manifest.json`: the files of each package (release asset) and the deltas available for it.
 # - `<package>.from-<tag>.mgdelta`: one delta per package and older release. A delta is an uncompressed zip
 #   holding `delta.json` (one operation per file of the new package) and the data the operations need.
+#   Zip archives inside packages (like `macos.zip` in the export templates) get one operation per entry.
 #
 # Changed files are diffed with bsdiff, which handles the shifted addresses of recompiled executables
 # much better than generic compressors, and the result is compressed with zstd. The patch data format
@@ -28,7 +29,7 @@ import struct
 import subprocess
 import time
 import zipfile
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,9 @@ PACKAGES = {
 
 # Release and asset objects of the GitHub REST API.
 Json = dict[str, Any]
+
+# Archives inside packages whose entries are diffed individually, see `DeltaEncoder.plan_archive()`.
+NESTED_ARCHIVE_SUFFIXES = (".zip",)
 
 ZSTD_LEVEL = 22
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
@@ -151,16 +155,19 @@ class Releases:
 # Packages.
 
 
-def extract(archive: Path, dest: Path) -> dict[str, FileInfo]:
+def extract(archive: Path, dest: Path) -> tuple[dict[str, FileInfo], dict[str, zipfile.ZipInfo]]:
+    """Extracts a zip, returning its files and the zip entries of all files and folders, by path."""
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     files: dict[str, FileInfo] = {}
+    entries: dict[str, zipfile.ZipInfo] = {}
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
+            name = info.filename.replace("\\", "/")
+            entries[name] = info
             if info.is_dir():
                 continue
-            name = info.filename.replace("\\", "/")
             path = dest / name
             # Refuse paths escaping the destination.
             if not path.resolve().is_relative_to(dest.resolve()):
@@ -170,7 +177,7 @@ def extract(archive: Path, dest: Path) -> dict[str, FileInfo]:
                 shutil.copyfileobj(fin, fout)
             mode = stat.S_IMODE(info.external_attr >> 16) or 0o644
             files[name] = FileInfo(name, path.stat().st_size, sha256_file(path), mode)
-    return files
+    return files, entries
 
 
 def write_patch(old_path: Path, new_path: Path, out_path: Path) -> int:
@@ -213,6 +220,85 @@ def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int
     return "add", full
 
 
+class DeltaEncoder:
+    """Works out the operations turning a folder of old files into the new ones, encoding the data they need
+    in the background."""
+
+    def __init__(self, pool: ProcessPoolExecutor, data_dir: Path):
+        self.pool = pool
+        self.data_dir = data_dir
+        self.next_index = 0
+        self.pending: list[tuple[dict[str, object], FileInfo | None, Future[tuple[str, Path]]]] = []
+
+    def plan(
+        self,
+        old_dir: Path,
+        old_files: dict[str, FileInfo],
+        new_dir: Path,
+        new_files: dict[str, FileInfo],
+        nested: bool,
+    ) -> list[dict[str, object]]:
+        old_by_hash = {f.sha256: f for f in old_files.values()}
+        operations: list[dict[str, object]] = []
+        # Encode the largest files first so they don't end up running last on their own.
+        for new in sorted(new_files.values(), key=lambda f: f.size, reverse=True):
+            op: dict[str, object] = new.to_json()
+            operations.append(op)
+            old = old_files.get(new.path)
+            if nested and old is not None and new.path.endswith(NESTED_ARCHIVE_SUFFIXES):
+                self.plan_archive(op, old_dir / old.path, new_dir / new.path, old.path)
+            elif old is not None and old.sha256 == new.sha256:
+                op.update(op="copy", source=old.path, source_sha256=old.sha256)
+            elif new.sha256 in old_by_hash:
+                renamed = old_by_hash[new.sha256]
+                op.update(op="copy", source=renamed.path, source_sha256=renamed.sha256)
+            else:
+                index = self.next_index
+                self.next_index += 1
+                old_path = old_dir / old.path if old is not None else None
+                future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index)
+                op["entry"] = f"data/{index}"
+                self.pending.append((op, old, future))
+        return operations
+
+    def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str) -> None:
+        """Archives (like `macos.zip` in the export templates) are compressed, so patching them as a whole
+        barely helps. Instead, the operation describes their entries, and the launcher rebuilds the archive.
+        It's then not byte-identical to the original, so its entries are checked instead of the whole file."""
+        work = self.data_dir.parent / f"nested-{self.next_index}"
+        self.next_index += 1
+        old_files, _ = extract(old_zip, work / "old")
+        new_files, new_entries = extract(new_zip, work / "new")
+        entries = self.plan(work / "old", old_files, work / "new", new_files, nested=False)
+        for entry in entries:
+            entry["compressed"] = new_entries[str(entry["path"])].compress_type != zipfile.ZIP_STORED
+        for name, info in new_entries.items():
+            if info.is_dir():
+                entries.append({"op": "dir", "path": name, "mode": stat.S_IMODE(info.external_attr >> 16) or 0o755})
+        entries.sort(key=lambda e: str(e["path"]))
+        op.update(op="archive", source=source, entries=entries)
+
+    def finish(self) -> list[tuple[str, Path]]:
+        """Waits for the encoding to finish, and returns the data to store, as (entry name, file)."""
+        data = []
+        for op, old, future in self.pending:
+            kind, path = future.result()
+            op["op"] = kind
+            if kind == "patch":
+                assert old is not None
+                op.update(source=old.path, source_sha256=old.sha256)
+            data.append((str(op["entry"]), path))
+        return data
+
+
+def count_ops(operations: list[dict[str, object]], counts: dict[str, int]) -> dict[str, int]:
+    for op in operations:
+        counts[str(op["op"])] = counts.get(str(op["op"]), 0) + 1
+        if op["op"] == "archive":
+            count_ops(op["entries"], counts)  # type: ignore
+    return counts
+
+
 def build_delta(
     package: str,
     old_tag: str,
@@ -225,37 +311,17 @@ def build_delta(
     output: Path,
     jobs: int,
 ) -> Path:
-    data_dir = work / "delta-data"
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
+    delta_work = work / "delta"
+    if delta_work.exists():
+        shutil.rmtree(delta_work)
+    data_dir = delta_work / "data"
     data_dir.mkdir(parents=True)
-
-    old_by_hash = {f.sha256: f for f in old_files.values()}
-    operations: list[dict[str, object]] = []
-    pending = {}
 
     # Fork explicitly, since other start methods re-import this script, which isn't allowed.
     with ProcessPoolExecutor(max_workers=jobs, mp_context=multiprocessing.get_context("fork")) as pool:
-        # Encode the largest files first so they don't end up running last on their own.
-        for index, new in enumerate(sorted(new_files.values(), key=lambda f: f.size, reverse=True)):
-            op: dict[str, object] = new.to_json()
-            operations.append(op)
-            old = old_files.get(new.path)
-            if old is not None and old.sha256 == new.sha256:
-                op.update(op="copy", source=old.path, source_sha256=old.sha256)
-            elif new.sha256 in old_by_hash:
-                renamed = old_by_hash[new.sha256]
-                op.update(op="copy", source=renamed.path, source_sha256=renamed.sha256)
-            else:
-                old_path = old_dir / old.path if old is not None else None
-                pending[index] = (op, old, pool.submit(encode_file, old_path, new_dir / new.path, data_dir, index))
-
-        for index, (op, old, future) in pending.items():
-            kind, data = future.result()
-            op.update(op=kind, entry=f"data/{index}")
-            if kind == "patch":
-                assert old is not None
-                op.update(source=old.path, source_sha256=old.sha256)
+        encoder = DeltaEncoder(pool, data_dir)
+        operations = encoder.plan(old_dir, old_files, new_dir, new_files, nested=True)
+        data = encoder.finish()
 
     operations.sort(key=lambda o: str(o["path"]))
     descriptor = {
@@ -269,17 +335,13 @@ def build_delta(
     out = output / f"{package}.from-{old_tag}.mgdelta"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
         zf.writestr("delta.json", json.dumps(descriptor, indent=1))
-        for op in operations:
-            if "entry" in op:
-                data_index = str(op["entry"]).removeprefix("data/")
-                kind = "patch" if op["op"] == "patch" else "full"
-                zf.write(data_dir / f"{data_index}.{kind}", str(op["entry"]))
-    shutil.rmtree(data_dir)
+        for entry, path in sorted(data):
+            zf.write(path, entry)
+    shutil.rmtree(delta_work)
 
-    counts = {kind: sum(1 for o in operations if o["op"] == kind) for kind in ["copy", "patch", "add"]}
-    log(
-        f"  {out.name}: {out.stat().st_size / 1024 / 1024:.1f} MiB ({counts['copy']} unchanged, {counts['patch']} patched, {counts['add']} added)."
-    )
+    counts = count_ops(operations, {})
+    summary = ", ".join(f"{n} {kind}" for kind, n in sorted(counts.items()))
+    log(f"  {out.name}: {out.stat().st_size / 1024 / 1024:.1f} MiB ({summary}).")
     return out
 
 
@@ -320,7 +382,7 @@ def main() -> None:
         log(f"{package}: {asset['name']}")
         new_archive = releases.download(target, asset)
         new_dir = args.work / "new"
-        new_files = extract(new_archive, new_dir)
+        new_files, _ = extract(new_archive, new_dir)
         deltas: list[dict[str, object]] = []
 
         for old_release in previous:
@@ -328,7 +390,7 @@ def main() -> None:
             if old_asset is None:
                 continue
             old_dir = args.work / "old"
-            old_files = extract(releases.download(old_release, old_asset), old_dir)
+            old_files, _ = extract(releases.download(old_release, old_asset), old_dir)
             delta = build_delta(
                 package,
                 old_release["tag_name"],
