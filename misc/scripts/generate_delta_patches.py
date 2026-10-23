@@ -180,6 +180,12 @@ def extract(archive: Path, dest: Path) -> tuple[dict[str, FileInfo], dict[str, z
     return files, entries
 
 
+def has_symlinks(entries: dict[str, zipfile.ZipInfo]) -> bool:
+    """Symlinks are extracted as regular files holding the link target, and the launcher only writes regular
+    files, so the operations can't reproduce them."""
+    return any(stat.S_ISLNK(info.external_attr >> 16) for info in entries.values())
+
+
 def write_patch(old_path: Path, new_path: Path, out_path: Path) -> int:
     """Writes a `MGBSDF01` patch: the magic, then a zstd stream of bsdiff records
     (int64 diff length, int64 extra length, int64 seek, diff bytes, extra bytes)."""
@@ -246,8 +252,9 @@ class DeltaEncoder:
             operations.append(op)
             old = old_files.get(new.path)
             if nested and old is not None and new.path.endswith(NESTED_ARCHIVE_SUFFIXES):
-                self.plan_archive(op, old_dir / old.path, new_dir / new.path, old.path)
-            elif old is not None and old.sha256 == new.sha256:
+                if self.plan_archive(op, old_dir / old.path, new_dir / new.path, old.path):
+                    continue
+            if old is not None and old.sha256 == new.sha256:
                 op.update(op="copy", source=old.path, source_sha256=old.sha256)
             elif new.sha256 in old_by_hash:
                 renamed = old_by_hash[new.sha256]
@@ -261,14 +268,19 @@ class DeltaEncoder:
                 self.pending.append((op, old, future))
         return operations
 
-    def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str) -> None:
+    def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str) -> bool:
         """Archives (like `macos.zip` in the export templates) are compressed, so patching them as a whole
         barely helps. Instead, the operation describes their entries, and the launcher rebuilds the archive.
-        It's then not byte-identical to the original, so its entries are checked instead of the whole file."""
+        It's then not byte-identical to the original, so its entries are checked instead of the whole file.
+        Returns false for archives holding symlinks, which are then handled as regular files."""
         work = self.data_dir.parent / f"nested-{self.next_index}"
         self.next_index += 1
-        old_files, _ = extract(old_zip, work / "old")
+        old_files, old_entries = extract(old_zip, work / "old")
         new_files, new_entries = extract(new_zip, work / "new")
+        if has_symlinks(old_entries) or has_symlinks(new_entries):
+            log(f"  {source} holds symlinks, diffing it as a whole.")
+            shutil.rmtree(work)
+            return False
         entries = self.plan(work / "old", old_files, work / "new", new_files, nested=False)
         for entry in entries:
             entry["compressed"] = new_entries[str(entry["path"])].compress_type != zipfile.ZIP_STORED
@@ -277,6 +289,7 @@ class DeltaEncoder:
                 entries.append({"op": "dir", "path": name, "mode": stat.S_IMODE(info.external_attr >> 16) or 0o755})
         entries.sort(key=lambda e: str(e["path"]))
         op.update(op="archive", source=source, entries=entries)
+        return True
 
     def finish(self) -> list[tuple[str, Path]]:
         """Waits for the encoding to finish, and returns the data to store, as (entry name, file)."""
@@ -382,15 +395,24 @@ def main() -> None:
         log(f"{package}: {asset['name']}")
         new_archive = releases.download(target, asset)
         new_dir = args.work / "new"
-        new_files, _ = extract(new_archive, new_dir)
+        new_files, new_entries = extract(new_archive, new_dir)
         deltas: list[dict[str, object]] = []
+        if has_symlinks(new_entries):
+            log(f"::warning::{asset['name']} holds symlinks, which deltas can't reproduce, skipping its deltas.")
+            previous_for_package = []
+        else:
+            previous_for_package = previous
 
-        for old_release in previous:
+        for old_release in previous_for_package:
             old_asset = releases.find_asset(old_release, suffix)
             if old_asset is None:
                 continue
             old_dir = args.work / "old"
-            old_files, _ = extract(releases.download(old_release, old_asset), old_dir)
+            old_files, old_entries = extract(releases.download(old_release, old_asset), old_dir)
+            if has_symlinks(old_entries):
+                log(f"  {old_asset['name']} holds symlinks, which deltas can't rely on, skipping it.")
+                shutil.rmtree(old_dir)
+                continue
             delta = build_delta(
                 package,
                 old_release["tag_name"],

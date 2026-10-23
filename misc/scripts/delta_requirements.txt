@@ -1,0 +1,8 @@
+# Dependencies of `generate_delta_patches.py`, pinned with hashes since the workflow running it can write
+# release assets. Only the wheels for the CI runner (CPython 3.13, Linux x86_64) are listed, install with
+# `pip install --require-hashes --only-binary :all: -r delta_requirements.txt`.
+# The `MGBSDF01` patch format depends on the control tuples of `bsdiff4.core.diff()`, check them before updating.
+bsdiff4==1.3.1 \
+    --hash=sha256:b2677e00141e0d7263937e38bb0c2bd1d5172789093b10b150b94b9cd2280106
+zstandard==0.25.0 \
+    --hash=sha256:8e735494da3db08694d26480f1493ad2cf86e99bdd53e8e9771b2752a5c0246a
