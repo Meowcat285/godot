@@ -15,3 +15,13 @@ Reasons:
 - Do not prepare branches, patches, or commits intended for upstream submission.
 - When creating a pull request in this repository, target this fork (`meowcat285/godot`), never upstream.
 - If asked to prepare something for upstream, stop and confirm with the user first, pointing out this policy.
+
+## Keep changes scoped to ease upstream merges
+
+This fork regularly pulls in changes from upstream Godot, so every change here should be as small and self-contained as possible to keep those merges easy and conflict-free.
+
+- Make the smallest change that does the job; avoid touching upstream files when it can be avoided.
+- Prefer adding new files, modules, or classes over editing existing upstream code. Where an upstream file must change, keep the edit minimal and localized (a few lines, a hook or call into new code).
+- Don't reformat, reorder, rename, or move existing code, and don't make drive-by cleanups or refactors in upstream files.
+- Don't change unrelated code, build files, or docs just because they are nearby.
+- Keep each commit focused on one logical change so it can be reviewed, reverted, or re-applied after an upstream merge.
