@@ -201,6 +201,8 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 	bool _uses_vulkan(const Ref<EditorExportPreset> &p_preset) const;
 
 	Error _generate_sparse_pck_metadata(const Ref<EditorExportPreset> &p_preset, PackData &p_pack_data, Vector<uint8_t> &r_data);
+	static bool _uses_gcas(const Ref<EditorExportPreset> &p_preset);
+	Error _store_gcas_in_apk(const Ref<EditorExportPreset> &p_preset, bool p_debug, APKExportData *ed);
 
 	static String _get_export_format_extension(int p_export_format);
 
