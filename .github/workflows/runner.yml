@@ -86,3 +86,14 @@ jobs:
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
+
+  # Publishes the GodotSharp NuGet packages to GitHub Packages, versioned after the release they belong to.
+  nuget-publish:
+    name: 📦 NuGet packages
+    needs: release
+    uses: ./.github/workflows/nuget_publish.yml
+    with:
+      release-name: ${{ needs.release.outputs.release-name }}
+    permissions:
+      contents: read
+      packages: write

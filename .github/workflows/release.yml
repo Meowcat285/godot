@@ -1,6 +1,10 @@
 name: 📦 Release
 on:
   workflow_call:
+    outputs:
+      release-name:
+        description: The name (and tag) of the published release.
+        value: ${{ jobs.release.outputs.release-name }}
 
 jobs:
   release:
@@ -9,6 +13,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    outputs:
+      release-name: ${{ steps.release-name.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -44,6 +50,7 @@ jobs:
           Automated build of commit ${GITHUB_SHA} (\`${GITHUB_REF_NAME}\`).
 
           - **Export templates:** download them from the editor via **Editor > Manage Export Templates**, or install the \`.tpz\` file manually.
+          - **NuGet packages:** \`GodotSharp\`, \`GodotSharpEditor\`, \`Godot.NET.Sdk\` and \`Godot.SourceGenerators\` version \`${RELEASE_NAME}\` on GitHub Packages (\`https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json\`).
           - **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
           # The target commit is used by the editor to find the export templates matching its build.
