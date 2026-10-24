@@ -4,13 +4,6 @@ on:
 
 # Signs and notarizes the macOS editor app, then uploads it as the `macos-editor-mono-signed` artifact,
 # which `misc/scripts/package_release.py` uses for the release instead of the unsigned app.
-#
-# The secrets live in the `macos-signing` environment (deployment limited to the default branch):
-# - MACOS_CERTIFICATE_P12_BASE64: base64 of the "Developer ID Application" certificate and key, as .p12.
-# - MACOS_CERTIFICATE_PASSWORD: password of the .p12 file.
-# - APPLE_API_KEY_P8_BASE64: base64 of the App Store Connect API key (.p8) used for notarization.
-# - APPLE_API_KEY_ID, APPLE_API_ISSUER_ID: key ID and issuer ID of that API key.
-# The optional MACOS_SIGNING_IDENTITY variable overrides the identity (default "Developer ID Application").
 # Signing is skipped (and the release ships the unsigned app) when none of the secrets are set.
 jobs:
   sign-macos:
