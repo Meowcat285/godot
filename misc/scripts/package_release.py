@@ -242,10 +242,12 @@ class Packager:
             return False
 
         # Same layout as `platform/macos/platform_macos_builders.py`.
+        # The per-architecture `Info_*.plist` files aren't part of the bundle, and codesign rejects them as
+        # unsigned code since they sit directly in `Contents/`.
         shutil.copytree(
             ROOT / "misc" / "dist" / "macos_tools.app",
             app_dir,
-            ignore=shutil.ignore_patterns("Info.plist"),
+            ignore=shutil.ignore_patterns("Info.plist", "Info_*.plist"),
         )
         (app_dir / "Contents" / "MacOS").mkdir(parents=True, exist_ok=True)
         shutil.copy(binary, app_dir / "Contents" / "MacOS" / "Godot")
