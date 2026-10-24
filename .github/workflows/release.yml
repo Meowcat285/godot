@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-24.04
     name: Publish release
     timeout-minutes: 30
+    # Waits for approval before publishing when the `release` environment has a required reviewer.
+    environment: release
     permissions:
       contents: write
     steps:

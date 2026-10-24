@@ -236,14 +236,12 @@ class Packager:
             add_tree(zf, artifact_dir, name, {artifact_dir / exe for exe in executables})
         return out
 
-    def package_macos_editor(self) -> Path | None:
+    def build_macos_editor_app(self, app_dir: Path) -> bool:
         binary = self.artifact_file("macos-editor-mono", "godot.macos.editor.universal.mono")
         if binary is None:
-            return None
+            return False
 
         # Same layout as `platform/macos/platform_macos_builders.py`.
-        app_name = "Godot_mono.app"
-        app_dir = self.work / app_name
         shutil.copytree(
             ROOT / "misc" / "dist" / "macos_tools.app",
             app_dir,
@@ -263,8 +261,23 @@ class Packager:
         if build not in ["official", "steam"]:
             plist = plist.replace("org.godotengine.godot", f"org.godotengine.godot.{build}")
         (app_dir / "Contents" / "Info.plist").write_text(plist, encoding="utf-8", newline="\n")
+        return True
 
+    def package_macos_editor(self) -> Path | None:
         out = self.output / f"{self.base_name}_macos.universal.zip"
+
+        # Signed and notarized app, zipped by `.github/workflows/macos_sign.yml` with `ditto` so the signature
+        # and stapled ticket are kept as is. Only present when the signing secrets are set up.
+        signed = self.artifacts / "macos-editor-mono-signed" / "Godot_mono.app.zip"
+        if signed.is_file():
+            shutil.copy(signed, out)
+            return out
+
+        app_name = "Godot_mono.app"
+        app_dir = self.work / app_name
+        if not self.build_macos_editor_app(app_dir):
+            return None
+
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
             add_tree(zf, app_dir, app_name, {app_dir / "Contents" / "MacOS" / "Godot"})
         return out
@@ -272,12 +285,29 @@ class Packager:
 
 parser = argparse.ArgumentParser(description="Package CI build artifacts into release assets.")
 parser.add_argument("--artifacts", type=Path, required=True, help="Folder containing the downloaded artifacts.")
-parser.add_argument("--output", type=Path, required=True, help="Folder to write the release assets to.")
+parser.add_argument("--output", type=Path, help="Folder to write the release assets to.")
 parser.add_argument("--module-config", default=".mono", help='Module configuration suffix (e.g. ".mono").')
+parser.add_argument(
+    "--macos-editor-app",
+    type=Path,
+    help="Only build the macOS editor app bundle at this path (for signing), instead of the release assets.",
+)
 args = parser.parse_args()
 
-args.output.mkdir(parents=True, exist_ok=True)
 version_config = get_version_config(args.module_config)
+
+if args.macos_editor_app is not None:
+    if args.macos_editor_app.exists():
+        shutil.rmtree(args.macos_editor_app)
+    packager = Packager(args.artifacts, args.macos_editor_app.parent, args.macos_editor_app.parent, version_config)
+    if not packager.build_macos_editor_app(args.macos_editor_app):
+        raise SystemExit("The macOS editor artifact is missing.")
+    print(f"Created {args.macos_editor_app}.")
+    raise SystemExit(0)
+
+if args.output is None:
+    parser.error("the --output argument is required")
+args.output.mkdir(parents=True, exist_ok=True)
 print(f"Packaging release assets for Godot {version_config}.")
 
 with tempfile.TemporaryDirectory() as tmp:
