@@ -27,9 +27,10 @@ import shutil
 import stat
 import struct
 import subprocess
+import sys
 import time
 import zipfile
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,10 @@ ZSTD_WINDOW_LOG = 27
 QUICK_LEVEL = 3
 QUICK_MARGIN = 4
 
+# Files taking long enough to encode that their start is logged, and how often to log the files left to encode.
+SLOW_FILE_SIZE = 16 * 1024 * 1024
+HEARTBEAT_SECONDS = 60
+
 
 @dataclass
 class FileInfo:
@@ -75,8 +80,26 @@ class FileInfo:
         return {"path": self.path, "size": self.size, "sha256": self.sha256, "mode": self.mode}
 
 
+START_TIME = time.monotonic()
+
+
 def log(message: str) -> None:
-    print(message, flush=True)
+    """Prints a line prefixed with the time since the start, so progress shows in CI logs as it happens.
+    GitHub Actions commands (like `::warning::`) aren't prefixed, they must start the line."""
+    if not message.startswith("::"):
+        elapsed = int(time.monotonic() - START_TIME)
+        message = f"[{elapsed // 60:3d}:{elapsed % 60:02d}] {message}"
+    # A single write, so lines from the worker processes don't get mixed up.
+    sys.stdout.write(message + "\n")
+    sys.stdout.flush()
+
+
+def mib(size: int) -> str:
+    return f"{size / 1024 / 1024:.1f} MiB"
+
+
+def human_size(size: int) -> str:
+    return mib(size) if size >= 1024 * 1024 else f"{size / 1024:.1f} KiB"
 
 
 def sha256_file(path: Path) -> str:
@@ -132,7 +155,7 @@ class Releases:
         if dest.is_file() and dest.stat().st_size == asset["size"]:
             return dest
         dest.parent.mkdir(parents=True, exist_ok=True)
-        log(f"Downloading {release['tag_name']}/{asset['name']} ({asset['size'] / 1024 / 1024:.1f} MiB).")
+        log(f"  Downloading {release['tag_name']}/{asset['name']} ({mib(asset['size'])}).")
         for attempt in range(3):
             try:
                 gh(
@@ -161,6 +184,7 @@ class Releases:
 
 def extract(archive: Path, dest: Path) -> tuple[dict[str, FileInfo], dict[str, zipfile.ZipInfo]]:
     """Extracts a zip, returning its files and the zip entries of all files and folders, by path."""
+    start = time.monotonic()
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
@@ -181,6 +205,8 @@ def extract(archive: Path, dest: Path) -> tuple[dict[str, FileInfo], dict[str, z
                 shutil.copyfileobj(fin, fout)
             mode = stat.S_IMODE(info.external_attr >> 16) or 0o644
             files[name] = FileInfo(name, path.stat().st_size, sha256_file(path), mode)
+    total = sum(f.size for f in files.values())
+    log(f"  Extracted {archive.name}: {len(files)} files, {mib(total)}, in {time.monotonic() - start:.0f}s.")
     return files, entries
 
 
@@ -222,8 +248,10 @@ def quick_full_size(new_path: Path) -> int:
         return int(zstandard.ZstdCompressor(level=QUICK_LEVEL).copy_stream(fin, null)[1])
 
 
-def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int) -> tuple[str, Path]:
+def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int, label: str) -> tuple[str, Path]:
     """Returns the cheapest of a patch against `old_path` and the full file, as (op, data path)."""
+    if new_path.stat().st_size >= SLOW_FILE_SIZE:
+        log(f"    Encoding {label} ({mib(new_path.stat().st_size)}).")
     full = out_dir / f"{index}.full"
     if old_path is None:
         write_full(new_path, full)
@@ -249,6 +277,8 @@ class DeltaEncoder:
         self.data_dir = data_dir
         self.next_index = 0
         self.pending: list[tuple[dict[str, object], FileInfo | None, Future[tuple[str, Path]]]] = []
+        # Path shown in the log, size, and submission time of each file to encode.
+        self.labels: dict[Future[tuple[str, Path]], tuple[str, int, float]] = {}
 
     def plan(
         self,
@@ -257,6 +287,7 @@ class DeltaEncoder:
         new_dir: Path,
         new_files: dict[str, FileInfo],
         nested: bool,
+        prefix: str = "",
     ) -> list[dict[str, object]]:
         old_by_hash = {f.sha256: f for f in old_files.values()}
         operations: list[dict[str, object]] = []
@@ -277,9 +308,11 @@ class DeltaEncoder:
                 index = self.next_index
                 self.next_index += 1
                 old_path = old_dir / old.path if old is not None else None
-                future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index)
+                label = prefix + new.path
+                future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index, label)
                 op["entry"] = f"data/{index}"
                 self.pending.append((op, old, future))
+                self.labels[future] = (label, new.size, time.monotonic())
         return operations
 
     def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str) -> bool:
@@ -295,7 +328,7 @@ class DeltaEncoder:
             log(f"  {source} holds symlinks, diffing it as a whole.")
             shutil.rmtree(work)
             return False
-        entries = self.plan(work / "old", old_files, work / "new", new_files, nested=False)
+        entries = self.plan(work / "old", old_files, work / "new", new_files, nested=False, prefix=f"{source}/")
         for entry in entries:
             entry["compressed"] = new_entries[str(entry["path"])].compress_type != zipfile.ZIP_STORED
         for name, info in new_entries.items():
@@ -307,6 +340,26 @@ class DeltaEncoder:
 
     def finish(self) -> list[tuple[str, Path]]:
         """Waits for the encoding to finish, and returns the data to store, as (entry name, file)."""
+        total = len(self.pending)
+        total_size = sum(size for _, size, _ in self.labels.values())
+        log(f"  Waiting for {total} changed files ({mib(total_size)}) to be encoded.")
+        done = done_size = 0
+        remaining = set(self.labels)
+        while remaining:
+            finished, remaining = wait(remaining, timeout=HEARTBEAT_SECONDS, return_when=FIRST_COMPLETED)
+            if not finished:
+                left = sum(self.labels[f][1] for f in remaining)
+                log(f"  Still encoding, {len(remaining)}/{total} files ({mib(left)}) left.")
+            for future in finished:
+                kind, path = future.result()
+                label, size, submitted = self.labels[future]
+                done += 1
+                done_size += size
+                log(
+                    f"  [{done}/{total}, {done_size * 100 // max(total_size, 1)}%] {kind} {label}: "
+                    + f"{human_size(size)} -> {human_size(path.stat().st_size)}"
+                    + f" ({time.monotonic() - submitted:.0f}s since queued)."
+                )
         data = []
         for op, old, future in self.pending:
             kind, path = future.result()
@@ -338,6 +391,8 @@ def build_delta(
     output: Path,
     jobs: int,
 ) -> Path:
+    log(f"  Building delta from {old_tag}.")
+    start = time.monotonic()
     delta_work = work / "delta"
     if delta_work.exists():
         shutil.rmtree(delta_work)
@@ -368,7 +423,7 @@ def build_delta(
 
     counts = count_ops(operations, {})
     summary = ", ".join(f"{n} {kind}" for kind, n in sorted(counts.items()))
-    log(f"  {out.name}: {out.stat().st_size / 1024 / 1024:.1f} MiB ({summary}).")
+    log(f"  {out.name}: {mib(out.stat().st_size)} ({summary}), in {time.monotonic() - start:.0f}s.")
     return out
 
 
@@ -404,12 +459,12 @@ def main() -> None:
     }
     packages: list[dict[str, object]] = manifest["packages"]  # type: ignore
 
-    for package, suffix in PACKAGES.items():
+    for package_index, (package, suffix) in enumerate(PACKAGES.items(), 1):
         asset = releases.find_asset(target, suffix)
         if asset is None:
             log(f"::warning::No asset matching *{suffix} in {args.tag}, skipping {package}.")
             continue
-        log(f"{package}: {asset['name']}")
+        log(f"Package {package_index}/{len(PACKAGES)}, {package}: {asset['name']} ({mib(asset['size'])}).")
         new_archive = releases.download(target, asset)
         new_dir = args.work / "new"
         new_files, new_entries = extract(new_archive, new_dir)
@@ -466,7 +521,7 @@ def main() -> None:
         })
 
     (args.output / MANIFEST_NAME).write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
-    log(f"Wrote {args.output / MANIFEST_NAME}.")
+    log(f"Wrote {args.output / MANIFEST_NAME}, done.")
 
 
 main()
