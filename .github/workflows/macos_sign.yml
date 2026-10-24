@@ -77,6 +77,7 @@ jobs:
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY || 'Developer ID Application' }}
         run: |
           keychain_password="$(uuidgen)"
           security create-keychain -p "${keychain_password}" "${KEYCHAIN}"
@@ -89,6 +90,16 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "${keychain_password}" "${KEYCHAIN}" > /dev/null
           # Add the keychain to the search list so codesign finds the certificate's chain.
           security list-keychains -d user -s "${KEYCHAIN}" $(security list-keychains -d user | tr -d '"')
+          # A .p12 often holds only the leaf certificate, and the runner may lack Apple's Developer ID G2
+          # intermediate, without which the identity isn't valid for signing.
+          intermediate="${RUNNER_TEMP}/DeveloperIDG2CA.cer"
+          curl -fsSL --retry 3 https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "${intermediate}"
+          security import "${intermediate}" -k "${KEYCHAIN}" || true
+          if ! security find-identity -v -p codesigning "${KEYCHAIN}" | grep -qF "${SIGNING_IDENTITY}"; then
+            echo "::error::No valid \"${SIGNING_IDENTITY}\" identity in the imported certificate."
+            security find-identity -p codesigning "${KEYCHAIN}"
+            exit 1
+          fi
 
       - name: Sign
         if: steps.secrets.outputs.enabled == 'true'
