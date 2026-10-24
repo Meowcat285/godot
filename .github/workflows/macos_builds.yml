@@ -1,6 +1,11 @@
 name: 🍎 macOS Builds
 on:
   workflow_call:
+    inputs:
+      nupkg-version:
+        description: Version of the GodotSharp NuGet packages, used by the editor for new and upgraded C# projects. Empty for the default.
+        type: string
+        default: ""
   workflow_dispatch:
 
 # Global Settings
@@ -130,6 +135,8 @@ jobs:
 
       - name: Build .NET solutions
         if: matrix.build-mono
+        env:
+          GODOT_NUPKG_VERSION: ${{ inputs.nupkg-version }}
         run: |
           dotnet --info
           ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=macos

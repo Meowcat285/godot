@@ -1,10 +1,11 @@
 name: 📦 Release
 on:
   workflow_call:
-    outputs:
+    inputs:
       release-name:
-        description: The name (and tag) of the published release.
-        value: ${{ jobs.release.outputs.release-name }}
+        description: The name (and tag) of the release, from the `release-name` job in runner.yml.
+        type: string
+        required: true
 
 jobs:
   release:
@@ -13,8 +14,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
-    outputs:
-      release-name: ${{ steps.release-name.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -29,28 +28,16 @@ jobs:
           ls -R artifacts | head -n 200
           python3 ./misc/scripts/package_release.py --artifacts artifacts --output release
 
-      # Release names use the `<year>.<month>.<build>` format, where the build number resets every month.
-      - name: Determine release name
-        id: release-name
-        run: |
-          prefix="$(date -u +%Y).$(date -u +%-m)"
-          last_build="$(git ls-remote --tags origin "refs/tags/${prefix}.*" \
-            | sed -n "s|.*refs/tags/${prefix//./\\.}\.\([0-9]\+\)$|\1|p" \
-            | sort -n | tail -n 1)"
-          name="${prefix}.$(( ${last_build:-0} + 1 ))"
-          echo "Release name: ${name}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NAME: ${{ steps.release-name.outputs.name }}
+          RELEASE_NAME: ${{ inputs.release-name }}
         run: |
           cat > release-notes.md << EOF
           Automated build of commit ${GITHUB_SHA} (\`${GITHUB_REF_NAME}\`).
 
           - **Export templates:** download them from the editor via **Editor > Manage Export Templates**, or install the \`.tpz\` file manually.
-          - **NuGet packages:** \`GodotSharp\`, \`GodotSharpEditor\`, \`Godot.NET.Sdk\` and \`Godot.SourceGenerators\` version \`${RELEASE_NAME}\` on GitHub Packages (\`https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json\`).
+          - **NuGet packages:** \`GodotSharp\`, \`GodotSharpEditor\`, \`Godot.NET.Sdk\` and \`Godot.SourceGenerators\` version \`${RELEASE_NAME}\` on GitHub Packages (\`https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json\`). The editor bundles the same version and sets new and opened C# projects to it.
           - **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
           # The target commit is used by the editor to find the export templates matching its build.
