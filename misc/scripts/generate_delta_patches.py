@@ -58,6 +58,10 @@ NESTED_ARCHIVE_SUFFIXES = (".zip",)
 ZSTD_LEVEL = 22
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
 ZSTD_WINDOW_LOG = 27
+# Patches this many times smaller than the file compressed at `QUICK_LEVEL` are kept without trying the full file.
+# On Godot binaries, `ZSTD_LEVEL` only gets 20-30% smaller than `QUICK_LEVEL`.
+QUICK_LEVEL = 3
+QUICK_MARGIN = 4
 
 
 @dataclass
@@ -212,14 +216,24 @@ def write_full(new_path: Path, out_path: Path) -> int:
     return out_path.stat().st_size
 
 
+def quick_full_size(new_path: Path) -> int:
+    """Size of the file compressed at a fast level, which `ZSTD_LEVEL` can't make several times smaller."""
+    with open(new_path, "rb") as fin, open(os.devnull, "wb") as null:
+        return int(zstandard.ZstdCompressor(level=QUICK_LEVEL).copy_stream(fin, null)[1])
+
+
 def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int) -> tuple[str, Path]:
     """Returns the cheapest of a patch against `old_path` and the full file, as (op, data path)."""
     full = out_dir / f"{index}.full"
-    full_size = write_full(new_path, full)
     if old_path is None:
+        write_full(new_path, full)
         return "add", full
     patch = out_dir / f"{index}.patch"
-    if write_patch(old_path, new_path, patch) < full_size:
+    patch_size = write_patch(old_path, new_path, patch)
+    # Compressing a large file at `ZSTD_LEVEL` takes longer than diffing it, so skip it when it can't win.
+    if patch_size * QUICK_MARGIN <= quick_full_size(new_path):
+        return "patch", patch
+    if patch_size < write_full(new_path, full):
         full.unlink()
         return "patch", patch
     patch.unlink()
@@ -364,7 +378,10 @@ def main() -> None:
     parser.add_argument("--tag", required=True, help="Tag of the release to generate deltas to.")
     parser.add_argument("--history", type=int, default=2, help="Number of older releases to generate deltas from.")
     parser.add_argument(
-        "--jobs", type=int, default=2, help="Files to diff in parallel (each needs ~17x the file size in RAM)."
+        "--jobs",
+        type=int,
+        default=3,
+        help="Files to diff in parallel (each needs ~18x the file size in RAM, 3 fit in 16 GB with Godot binaries).",
     )
     parser.add_argument("--work", type=Path, required=True, help="Scratch folder (downloads are cached in it).")
     parser.add_argument("--output", type=Path, required=True, help="Folder to write the release assets to.")
