@@ -339,27 +339,7 @@ class DeltaEncoder:
         return True
 
     def finish(self) -> list[tuple[str, Path]]:
-        """Waits for the encoding to finish, and returns the data to store, as (entry name, file)."""
-        total = len(self.pending)
-        total_size = sum(size for _, size, _ in self.labels.values())
-        log(f"  Waiting for {total} changed files ({mib(total_size)}) to be encoded.")
-        done = done_size = 0
-        remaining = set(self.labels)
-        while remaining:
-            finished, remaining = wait(remaining, timeout=HEARTBEAT_SECONDS, return_when=FIRST_COMPLETED)
-            if not finished:
-                left = sum(self.labels[f][1] for f in remaining)
-                log(f"  Still encoding, {len(remaining)}/{total} files ({mib(left)}) left.")
-            for future in finished:
-                kind, path = future.result()
-                label, size, submitted = self.labels[future]
-                done += 1
-                done_size += size
-                log(
-                    f"  [{done}/{total}, {done_size * 100 // max(total_size, 1)}%] {kind} {label}: "
-                    + f"{human_size(size)} -> {human_size(path.stat().st_size)}"
-                    + f" ({time.monotonic() - submitted:.0f}s since queued)."
-                )
+        """Returns the data to store once all the files are encoded, as (entry name, file)."""
         data = []
         for op, old, future in self.pending:
             kind, path = future.result()
@@ -403,6 +383,7 @@ class PendingDelta:
     encoder: DeltaEncoder
     operations: list[dict[str, object]]
     start: float
+    left: int
 
 
 def start_delta(
@@ -424,11 +405,11 @@ def start_delta(
     encoder = DeltaEncoder(pool, data_dir)
     operations = encoder.plan(old_dir, old_files, state.new_dir, new_files, nested=True)
     state.pending += 1
-    return PendingDelta(state, package, old_tag, old_dir, delta_work, encoder, operations, time.monotonic())
+    pending = len(encoder.pending)
+    return PendingDelta(state, package, old_tag, old_dir, delta_work, encoder, operations, time.monotonic(), pending)
 
 
 def finish_delta(delta: PendingDelta, new_tag: str, output: Path) -> Path:
-    log(f"  Finishing {delta.package} delta from {delta.old_tag}.")
     data = delta.encoder.finish()
     operations = delta.operations
     operations.sort(key=lambda o: str(o["path"]))
@@ -479,6 +460,52 @@ def close_package(state: PackageState) -> None:
         shutil.rmtree(state.new_dir)
 
 
+class Progress:
+    """Logs the files of all deltas as they're encoded, and closes each delta once all its files are."""
+
+    def __init__(self, new_tag: str, output: Path):
+        self.new_tag = new_tag
+        self.output = output
+        self.deltas: dict[Future[tuple[str, Path]], PendingDelta] = {}
+        self.total = self.total_size = self.done = self.done_size = 0
+
+    def add(self, delta: PendingDelta) -> None:
+        for future in delta.encoder.labels:
+            self.deltas[future] = delta
+            self.total += 1
+            self.total_size += delta.encoder.labels[future][1]
+        if delta.left == 0:
+            close_delta(delta, self.new_tag, self.output)
+
+    def poll(self, timeout: float) -> bool:
+        """Handles the files encoded within `timeout` seconds, returns whether there were any."""
+        if not self.deltas:
+            return False
+        finished, _ = wait(self.deltas, timeout=timeout, return_when=FIRST_COMPLETED)
+        for future in finished:
+            delta = self.deltas.pop(future)
+            kind, path = future.result()
+            label, size, submitted = delta.encoder.labels[future]
+            self.done += 1
+            self.done_size += size
+            log(
+                f"  [{self.done}/{self.total}, {self.done_size * 100 // max(self.total_size, 1)}%] "
+                + f"{kind} {delta.package}:{label}: {human_size(size)} -> {human_size(path.stat().st_size)}"
+                + f" ({time.monotonic() - submitted:.0f}s since queued)."
+            )
+            delta.left -= 1
+            if delta.left == 0:
+                close_delta(delta, self.new_tag, self.output)
+        return bool(finished)
+
+    def run(self) -> None:
+        """Waits for all the files to be encoded."""
+        while self.deltas:
+            if not self.poll(HEARTBEAT_SECONDS):
+                left = sum(d.encoder.labels[f][1] for f, d in self.deltas.items())
+                log(f"  Still encoding, {len(self.deltas)}/{self.total} files ({mib(left)}) left.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate delta patches for Meow Godot Launcher.")
     parser.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY"), help="Repository, as `owner/name`.")
@@ -511,17 +538,24 @@ def main() -> None:
     }
     packages: list[dict[str, object]] = manifest["packages"]  # type: ignore
 
-    # One pool for the whole run, so the files of the next delta are encoded while the last (and largest) files
-    # of the previous one are, instead of leaving workers idle. One delta is planned ahead of the one finishing.
-    # Fork explicitly, since other start methods re-import this script, which isn't allowed.
-    in_flight: list[PendingDelta] = []
+    found: list[tuple[str, str, Json]] = []
+    for package, suffix in PACKAGES.items():
+        asset = releases.find_asset(target, suffix)
+        if asset is None:
+            log(f"::warning::No asset matching *{suffix} in {args.tag}, skipping {package}.")
+        else:
+            found.append((package, suffix, asset))
+    # Start with the largest packages, so their files, the slowest to encode, are queued first.
+    found.sort(key=lambda p: p[2]["size"], reverse=True)
+
+    # All the deltas of all the packages share one pool: the files of every delta are queued as soon as it's
+    # planned, so the workers stay busy until the end. `--jobs` still caps the files encoded at once, and with it
+    # the memory used. Fork explicitly, since other start methods re-import this script, which isn't allowed.
+    records: dict[str, dict[str, object]] = {}
+    progress = Progress(args.tag, args.output)
     with ProcessPoolExecutor(max_workers=args.jobs, mp_context=multiprocessing.get_context("fork")) as pool:
-        for package_index, (package, suffix) in enumerate(PACKAGES.items(), 1):
-            asset = releases.find_asset(target, suffix)
-            if asset is None:
-                log(f"::warning::No asset matching *{suffix} in {args.tag}, skipping {package}.")
-                continue
-            log(f"Package {package_index}/{len(PACKAGES)}, {package}: {asset['name']} ({mib(asset['size'])}).")
+        for package_index, (package, suffix, asset) in enumerate(found, 1):
+            log(f"Package {package_index}/{len(found)}, {package}: {asset['name']} ({mib(asset['size'])}).")
             new_archive = releases.download(target, asset)
             new_dir = args.work / f"new-{package}"
             new_files, new_entries = extract(new_archive, new_dir)
@@ -537,7 +571,7 @@ def main() -> None:
                     "deltas": [],
                 },
             )
-            packages.append(state.record)
+            records[package] = state.record
             if has_symlinks(new_entries):
                 log(f"::warning::{asset['name']} holds symlinks, which deltas can't reproduce, skipping its deltas.")
                 previous_for_package = []
@@ -554,17 +588,24 @@ def main() -> None:
                     log(f"  {old_asset['name']} holds symlinks, which deltas can't rely on, skipping it.")
                     shutil.rmtree(old_dir)
                     continue
-                in_flight.append(
+                progress.add(
                     start_delta(pool, state, package, old_release["tag_name"], old_dir, old_files, new_files, args.work)
                 )
-                while len(in_flight) > 1:
-                    close_delta(in_flight.pop(0), args.tag, args.output)
+                progress.poll(0)
 
             state.planned = True
             close_package(state)
 
-        while in_flight:
-            close_delta(in_flight.pop(0), args.tag, args.output)
+        log(f"All deltas planned, {progress.total} changed files ({mib(progress.total_size)}) to encode in total.")
+        progress.run()
+
+    # Deltas are listed from the newest release, in the order of `PACKAGES`, whatever order they're done in.
+    order = {r["tag_name"]: i for i, r in enumerate(previous)}
+    for package in PACKAGES:
+        if package in records:
+            deltas: list[dict[str, object]] = records[package]["deltas"]  # type: ignore
+            deltas.sort(key=lambda d: order[str(d["from"])])
+            packages.append(records[package])
 
     (args.output / MANIFEST_NAME).write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     log(f"Wrote {args.output / MANIFEST_NAME}, done.")
