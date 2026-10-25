@@ -282,6 +282,9 @@ class DeltaEncoder:
         self.pending: list[tuple[dict[str, object], FileInfo | None, Future[tuple[str, Path]]]] = []
         # Path shown in the log, size, and submission time of each file to encode.
         self.labels: dict[Future[tuple[str, Path]], tuple[str, int, float]] = {}
+        # Data entry and encoding of each (old hash, new hash) pair, since the same file can appear in several
+        # places, like the native library of the Android templates, in both the APK and the AAR.
+        self.encoded: dict[tuple[str | None, str], tuple[str, Future[tuple[str, Path]]]] = {}
 
     def plan(
         self,
@@ -307,14 +310,18 @@ class DeltaEncoder:
                 renamed = old_by_hash[new.sha256]
                 op.update(op="copy", source=renamed.path, source_sha256=renamed.sha256)
             else:
-                index = self.next_index
-                self.next_index += 1
-                old_path = old_dir / old.path if old is not None else None
-                label = prefix + new.path
-                future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index, label)
-                op["entry"] = f"data/{index}"
+                key = (old.sha256 if old is not None else None, new.sha256)
+                if key not in self.encoded:
+                    index = self.next_index
+                    self.next_index += 1
+                    old_path = old_dir / old.path if old is not None else None
+                    label = prefix + new.path
+                    future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index, label)
+                    self.encoded[key] = (f"data/{index}", future)
+                    self.labels[future] = (label, new.size, time.monotonic())
+                entry, future = self.encoded[key]
+                op["entry"] = entry
                 self.pending.append((op, old, future))
-                self.labels[future] = (label, new.size, time.monotonic())
         return operations
 
     def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str, prefix: str) -> bool:
@@ -342,15 +349,15 @@ class DeltaEncoder:
 
     def finish(self) -> list[tuple[str, Path]]:
         """Returns the data to store once all the files are encoded, as (entry name, file)."""
-        data = []
+        data = {}
         for op, old, future in self.pending:
             kind, path = future.result()
             op["op"] = kind
             if kind == "patch":
                 assert old is not None
                 op.update(source=old.path, source_sha256=old.sha256)
-            data.append((str(op["entry"]), path))
-        return data
+            data[str(op["entry"])] = path
+        return list(data.items())
 
 
 def count_ops(operations: list[dict[str, object]], counts: dict[str, int]) -> dict[str, int]:
@@ -407,7 +414,7 @@ def start_delta(
     encoder = DeltaEncoder(pool, data_dir)
     operations = encoder.plan(old_dir, old_files, state.new_dir, new_files)
     state.pending += 1
-    pending = len(encoder.pending)
+    pending = len(encoder.labels)
     return PendingDelta(state, package, old_tag, old_dir, delta_work, encoder, operations, time.monotonic(), pending)
 
 
