@@ -10,7 +10,8 @@ if __name__ != "__main__":
 # - `meow-launcher-manifest.json`: the files of each package (release asset) and the deltas available for it.
 # - `<package>.from-<tag>.mgdelta`: one delta per package and older release. A delta is an uncompressed zip
 #   holding `delta.json` (one operation per file of the new package) and the data the operations need.
-#   Zip archives inside packages (like `macos.zip` in the export templates) get one operation per entry.
+#   Zip archives inside packages (like `macos.zip` or the Android APKs in the export templates) get one operation
+#   per entry, as do archives inside them (like the AARs in `android_source.zip`).
 #
 # Changed files are diffed with bsdiff, which handles the shifted addresses of recompiled executables
 # much better than generic compressors, and the result is compressed with zstd. The patch data format
@@ -54,7 +55,9 @@ PACKAGES = {
 Json = dict[str, Any]
 
 # Archives inside packages whose entries are diffed individually, see `DeltaEncoder.plan_archive()`.
-NESTED_ARCHIVE_SUFFIXES = (".zip",)
+# APKs and AARs are zips too: the Android templates aren't signed, and the editor rebuilds, aligns and signs the APK
+# when exporting, so their exact layout doesn't matter.
+NESTED_ARCHIVE_SUFFIXES = (".zip", ".apk", ".aar")
 
 ZSTD_LEVEL = 22
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
@@ -286,7 +289,6 @@ class DeltaEncoder:
         old_files: dict[str, FileInfo],
         new_dir: Path,
         new_files: dict[str, FileInfo],
-        nested: bool,
         prefix: str = "",
     ) -> list[dict[str, object]]:
         old_by_hash = {f.sha256: f for f in old_files.values()}
@@ -296,8 +298,8 @@ class DeltaEncoder:
             op: dict[str, object] = new.to_json()
             operations.append(op)
             old = old_files.get(new.path)
-            if nested and old is not None and new.path.endswith(NESTED_ARCHIVE_SUFFIXES):
-                if self.plan_archive(op, old_dir / old.path, new_dir / new.path, old.path):
+            if old is not None and new.path.endswith(NESTED_ARCHIVE_SUFFIXES):
+                if self.plan_archive(op, old_dir / old.path, new_dir / new.path, old.path, prefix):
                     continue
             if old is not None and old.sha256 == new.sha256:
                 op.update(op="copy", source=old.path, source_sha256=old.sha256)
@@ -315,7 +317,7 @@ class DeltaEncoder:
                 self.labels[future] = (label, new.size, time.monotonic())
         return operations
 
-    def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str) -> bool:
+    def plan_archive(self, op: dict[str, object], old_zip: Path, new_zip: Path, source: str, prefix: str) -> bool:
         """Archives (like `macos.zip` in the export templates) are compressed, so patching them as a whole
         barely helps. Instead, the operation describes their entries, and the launcher rebuilds the archive.
         It's then not byte-identical to the original, so its entries are checked instead of the whole file.
@@ -325,10 +327,10 @@ class DeltaEncoder:
         old_files, old_entries = extract(old_zip, work / "old")
         new_files, new_entries = extract(new_zip, work / "new")
         if has_symlinks(old_entries) or has_symlinks(new_entries):
-            log(f"  {source} holds symlinks, diffing it as a whole.")
+            log(f"  {prefix}{source} holds symlinks, diffing it as a whole.")
             shutil.rmtree(work)
             return False
-        entries = self.plan(work / "old", old_files, work / "new", new_files, nested=False, prefix=f"{source}/")
+        entries = self.plan(work / "old", old_files, work / "new", new_files, prefix=f"{prefix}{source}/")
         for entry in entries:
             entry["compressed"] = new_entries[str(entry["path"])].compress_type != zipfile.ZIP_STORED
         for name, info in new_entries.items():
@@ -403,7 +405,7 @@ def start_delta(
     data_dir = delta_work / "data"
     data_dir.mkdir(parents=True)
     encoder = DeltaEncoder(pool, data_dir)
-    operations = encoder.plan(old_dir, old_files, state.new_dir, new_files, nested=True)
+    operations = encoder.plan(old_dir, old_files, state.new_dir, new_files)
     state.pending += 1
     pending = len(encoder.pending)
     return PendingDelta(state, package, old_tag, old_dir, delta_work, encoder, operations, time.monotonic(), pending)
