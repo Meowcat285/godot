@@ -311,7 +311,7 @@ def generate_sdk_package_versions():
         godotsharp_version_str += f"-{godotsharp_version_status}"
         godot_dotnet_version_str += f"-{godot_dotnet_version_status}"
 
-    # Fork: lets CI version the published NuGet packages after the release name (e.g. "2026.10.8").
+    # Fork: lets CI version the bundled NuGet packages after the release name (e.g. "2026.10.8").
     if os.environ.get("GODOT_NUPKG_VERSION"):
         godotsharp_version_str = os.environ["GODOT_NUPKG_VERSION"]
 

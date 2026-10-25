@@ -19,8 +19,8 @@ jobs:
     uses: ./.github/workflows/static_checks.yml
 
   # Release names use the `<year>.<month>.<build>` format, where the build number resets every month.
-  # Determined before the builds, as the editor uses it as the version of the GodotSharp NuGet packages
-  # (see nuget_publish.yml). Empty when the run won't publish a release, so the default versions are used.
+  # Determined before the builds, as the editor uses it as the version of its bundled GodotSharp NuGet packages
+  # (see `nupkg-version` in the build workflows). Empty when the run won't publish a release, so the default versions are used.
   # Runs on the default branch don't overlap (see `concurrency`), so the name stays free until the release.
   release-name:
     name: 🏷️ Release name
@@ -120,14 +120,3 @@ jobs:
       release-name: ${{ needs.release-name.outputs.name }}
     permissions:
       contents: write
-
-  # Publishes the GodotSharp NuGet packages to GitHub Packages, versioned after the release they belong to.
-  nuget-publish:
-    name: 📦 NuGet packages
-    needs: [release-name, release]
-    uses: ./.github/workflows/nuget_publish.yml
-    with:
-      release-name: ${{ needs.release-name.outputs.name }}
-    permissions:
-      contents: read
-      packages: write
