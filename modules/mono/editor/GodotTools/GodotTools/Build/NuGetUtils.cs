@@ -7,6 +7,7 @@ using System.Xml;
 using System.Xml.Linq;
 using Godot;
 using GodotTools.Internals;
+using Environment = System.Environment;
 using OS = GodotTools.Utils.OS;
 
 namespace GodotTools.Build
