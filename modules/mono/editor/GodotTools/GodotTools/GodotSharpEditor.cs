@@ -493,6 +493,9 @@ namespace GodotTools
                 }
             }
 
+            // Fork: this fork's package versions aren't on nuget.org.
+            NuGetUtils.SetupBundledPackagesSource();
+
             var editorBaseControl = EditorInterface.Singleton.GetBaseControl();
 
             _editorSettings = EditorInterface.Singleton.GetEditorSettings();
