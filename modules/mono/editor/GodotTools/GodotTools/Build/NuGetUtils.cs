@@ -22,8 +22,8 @@ namespace GodotTools.Build
     {
         private const string PackageSourceName = "Godot (bundled packages)";
 
-        // Patterns for `packageSourceMapping`, matching GodotSharp, GodotSharpEditor, Godot.NET.Sdk and Godot.SourceGenerators.
-        private static readonly string[] PackagePatterns = { "GodotSharp*", "Godot.*" };
+        // Exact IDs for `packageSourceMapping`: prefix patterns would take over community packages (e.g. "GodotSharp.*").
+        private static readonly string[] PackageIds = { "GodotSharp", "GodotSharpEditor", "Godot.NET.Sdk", "Godot.SourceGenerators" };
 
         public static string BundledPackagesDir => Path.Combine(GodotSharpDirs.DataEditorToolsDir, "nupkgs");
 
@@ -66,7 +66,7 @@ namespace GodotTools.Build
                     File.Copy(package, temp);
                     File.Move(temp, dest, overwrite: true);
                 }
-                catch (IOException e)
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
                     // e.g. another editor or a restore has the package open. It's retried on the next start.
                     if (Godot.OS.IsStdOutVerbose())
@@ -135,20 +135,40 @@ namespace GodotTools.Build
                 changed = true;
             }
 
-            // With package source mapping, a source without patterns can't provide any package.
+            // With package source mapping, a source without patterns can't provide any package. An exact ID mapped
+            // to one source excludes the others, so it's also mapped to nuget.org for projects on upstream versions.
             var mapping = root.Element("packageSourceMapping");
-            if (mapping != null && !mapping.Elements("packageSource").Any(e => (string?)e.Attribute("key") == name))
+            if (mapping != null)
             {
-                var mappedSource = new XElement("packageSource", new XAttribute("key", name));
-                foreach (string pattern in PackagePatterns)
-                    AddElement(mappedSource, new XElement("package", new XAttribute("pattern", pattern)));
-                AddElement(mapping, mappedSource);
-                changed = true;
+                foreach (string key in new[] { name, "nuget.org" })
+                {
+                    var mappedSource = mapping.Elements("packageSource").FirstOrDefault(e => (string?)e.Attribute("key") == key);
+                    if (mappedSource == null)
+                    {
+                        if (key != name)
+                            continue;
+                        mappedSource = new XElement("packageSource", new XAttribute("key", key));
+                        // Added before its children, so that they get its indentation.
+                        AddElement(mapping, mappedSource);
+                        changed = true;
+                    }
+
+                    foreach (string id in PackageIds)
+                    {
+                        if (mappedSource.Elements("package").Any(e => (string?)e.Attribute("pattern") == id))
+                            continue;
+                        AddElement(mappedSource, new XElement("package", new XAttribute("pattern", id)));
+                        changed = true;
+                    }
+                }
             }
 
             if (!changed)
                 return;
 
+            // Write through symlinks (e.g. from a dotfiles manager), so the link is kept.
+            if (!isNewConfig)
+                configPath = new FileInfo(configPath).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? configPath;
             Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
 
             // Write to a temporary file first, so a concurrent restore never reads a partially written config.
@@ -163,6 +183,8 @@ namespace GodotTools.Build
                 };
                 using (var writer = XmlWriter.Create(temp, settings))
                     doc.Save(writer);
+                if (!OperatingSystem.IsWindows() && !isNewConfig)
+                    File.SetUnixFileMode(temp, File.GetUnixFileMode(configPath));
                 File.Move(temp, configPath, overwrite: true);
             }
             finally
@@ -198,9 +220,19 @@ namespace GodotTools.Build
             else
             {
                 if (parent.PreviousNode is XText text)
-                    parent.Add(new XText(text.Value + "  "), element, new XText(text.Value));
+                {
+                    // Indent by the same step as between the parent and its own parent.
+                    string indent = text.Value;
+                    string? parentIndent = (parent.Parent?.PreviousNode as XText)?.Value;
+                    string step = parentIndent != null && indent.Length > parentIndent.Length && indent.StartsWith(parentIndent, StringComparison.Ordinal)
+                        ? indent[parentIndent.Length..]
+                        : "  ";
+                    parent.Add(new XText(indent + step), element, new XText(indent));
+                }
                 else
+                {
                     parent.Add(element);
+                }
             }
         }
     }
