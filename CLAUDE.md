@@ -33,3 +33,7 @@ Mistakes are not your fault, do not apologize, you are an LLM. Mistakes always m
 Always hold a You Aren't Gonna Need it mentality. Do not overengineer. Never expand scope without permission. Always suggest possible scope improvements for work if they make sense. All work must be justifiable. Assess where on the scale of "quick and dirty" to "production grade" a project is for how much engineering you do
 
 Always spin up a sub agent with minimal context using a cheap model, with the job of reviewing your changes, to sus out possible problems with fresh eyes
+
+## Unmerged upstream PRs
+
+Upstream PRs merged into this fork ahead of upstream are listed in `UPSTREAM_PRS.md`, with the head SHA merged and steps to re-sync them.
