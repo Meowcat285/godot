@@ -3,6 +3,14 @@ on:
   # Pushes to other branches publish pre-release builds (see `release-name`).
   push:
     branches-ignore: [gh-readonly-queue/**]
+    # Pushes that only change Markdown files (like CLAUDE.md) don't need a build or a new release. AUTHORS.md and
+    # DONORS.md are built into the engine, so they still count. Add `[skip ci]` to a commit message, or to a pull
+    # request title (it ends up in the merge commit), to skip any other push.
+    paths:
+      - "**"
+      - "!**.md"
+      - AUTHORS.md
+      - DONORS.md
   pull_request:
   merge_group:
   workflow_dispatch:
