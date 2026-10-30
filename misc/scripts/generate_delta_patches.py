@@ -77,7 +77,8 @@ def prerelease_branch(release: Json) -> str | None:
 # when exporting, so their exact layout doesn't matter.
 NESTED_ARCHIVE_SUFFIXES = (".zip", ".apk", ".aar")
 
-ZSTD_LEVEL = 22
+# Level 22 takes about 1.7x as long as 19 on bsdiff output, for patches only about 1% smaller.
+ZSTD_LEVEL = 19
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
 ZSTD_WINDOW_LOG = 27
 # Patches this many times smaller than the file compressed at `QUICK_LEVEL` are kept without trying the full file.
