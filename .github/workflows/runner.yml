@@ -139,7 +139,7 @@ jobs:
   release:
     name: 📦 Release
     needs: [release-name, release-approval, macos-sign]
-    if: ${{ !cancelled() && !failure() && needs.release-name.outputs.name != '' }}
+    if: ${{ !cancelled() && !failure() && needs.macos-sign.result == 'success' }}
     uses: ./.github/workflows/release.yml
     with:
       release-name: ${{ needs.release-name.outputs.name }}

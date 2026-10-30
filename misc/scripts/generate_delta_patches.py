@@ -62,7 +62,8 @@ PRERELEASE_TAG = re.compile(r"^\d+\.\d+\.\d+-(?P<branch>[0-9A-Za-z-]+)\.\d+$")
 
 
 def branch_slug(branch: str) -> str:
-    return re.sub(r"[^0-9A-Za-z-]", "-", branch)
+    # Byte by byte, like `tr` in runner.yml.
+    return re.sub(rb"[^0-9A-Za-z-]", b"-", branch.encode()).decode()
 
 
 def prerelease_branch(release: Json) -> str | None:
