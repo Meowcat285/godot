@@ -100,13 +100,19 @@ void godotsharp_stack_info_vector_destroy(
 void godotsharp_internal_script_debugger_send_error(const String *p_func,
 		const String *p_file, int32_t p_line, const String *p_err, const String *p_descr,
 		ErrorHandlerType p_type, const Vector<ScriptLanguage::StackInfo> *p_stack_info_vector) {
+#ifdef DEBUG_ENABLED
 	const String file = ProjectSettings::get_singleton()->localize_path(p_file->simplify_path());
 	EngineDebugger::get_script_debugger()->send_error(*p_func, file, p_line, *p_err, *p_descr,
 			true, p_type, *p_stack_info_vector);
+#endif
 }
 
 bool godotsharp_internal_script_debugger_is_active() {
+#ifdef DEBUG_ENABLED
 	return EngineDebugger::is_active();
+#else
+	return false;
+#endif
 }
 
 GCHandleIntPtr godotsharp_internal_object_get_associated_gchandle(Object *p_ptr) {
@@ -1380,6 +1386,10 @@ int32_t godotsharp_node_path_get_subname_count(const NodePath *p_self) {
 	return p_self->get_subname_count();
 }
 
+void godotsharp_node_path_slice(const NodePath *p_self, int32_t p_begin, int32_t p_end, NodePath *r_result) {
+	memnew_placement(r_result, NodePath(p_self->slice(p_begin, p_end)));
+}
+
 bool godotsharp_node_path_is_absolute(const NodePath *p_self) {
 	return p_self->is_absolute();
 }
@@ -1783,6 +1793,7 @@ static const void *unmanaged_callbacks[]{
 	(void *)godotsharp_node_path_get_name_count,
 	(void *)godotsharp_node_path_get_subname,
 	(void *)godotsharp_node_path_get_subname_count,
+	(void *)godotsharp_node_path_slice,
 	(void *)godotsharp_node_path_is_absolute,
 	(void *)godotsharp_node_path_equals,
 	(void *)godotsharp_node_path_hash,
