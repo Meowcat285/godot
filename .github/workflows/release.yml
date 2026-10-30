@@ -21,6 +21,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The full history (without file contents) and tags, to list the commits since the previous release.
+          fetch-depth: 0
+          filter: tree:0
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -37,6 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NAME: ${{ inputs.release-name }}
           PRERELEASE: ${{ inputs.prerelease }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           cat > release-notes.md << EOF
           Automated build of commit ${GITHUB_SHA} (\`${GITHUB_REF_NAME}\`).
@@ -49,6 +54,32 @@ jobs:
           if [[ "${PRERELEASE}" == "true" ]]; then
             prerelease_flags=(--prerelease --latest=false)
             echo "- **Pre-release:** the macOS editor is signed but not notarized, so macOS asks for confirmation before opening it the first time." >> release-notes.md
+          fi
+          # Releases list the commits since the previous release, pre-releases the commits of their branch.
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            base="origin/${DEFAULT_BRANCH}"
+            compare="${DEFAULT_BRANCH}...${GITHUB_SHA}"
+            heading="Commits in \`${GITHUB_REF_NAME}\`"
+          else
+            base="$(gh release list --repo "${GITHUB_REPOSITORY}" --exclude-pre-releases --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')"
+            compare="${base}...${GITHUB_SHA}"
+            heading="Commits since ${base}"
+          fi
+          # Skipped for the first release, and if the base is missing, so the notes never block the release.
+          if [[ -n "${base}" ]] && git rev-parse -q --verify "${base}^{commit}" > /dev/null; then
+            max_commits=500
+            count="$(git rev-list --count "${base}..${GITHUB_SHA}")"
+            {
+              echo
+              echo "## ${heading} (${count})"
+              echo
+              git log --max-count="${max_commits}" --format="- [\`%h\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/%H) %s (%an)" "${base}..${GITHUB_SHA}"
+              if (( count > max_commits )); then
+                echo "- ...and $(( count - max_commits )) more."
+              fi
+              echo
+              echo "Full comparison: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${compare}"
+            } >> release-notes.md
           fi
           # The target commit is used by the editor to find the export templates matching its build.
           gh release create "${RELEASE_NAME}" release/* "${prerelease_flags[@]}" \
