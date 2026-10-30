@@ -1,11 +1,11 @@
 name: 🩹 Delta patches
 on:
-  # Runs once the main workflow has published a release. This is a separate workflow rather than a job of
-  # the main one so that new pushes, which cancel the main workflow, don't cancel patch generation.
+  # Runs once the main workflow has published a release, or a pre-release for other branches. This is a separate
+  # workflow rather than a job of the main one so that new pushes, which cancel the main workflow, don't cancel
+  # patch generation.
   workflow_run:
     workflows: ["🔗 GHA"]
     types: [completed]
-    branches: [slop]
   workflow_dispatch:
     inputs:
       tag:
@@ -13,7 +13,7 @@ on:
         type: string
         required: true
       history:
-        description: Number of older releases to generate deltas from.
+        description: Number of older releases to generate deltas from (ignored for pre-releases).
         type: number
         default: 2
 
@@ -41,13 +41,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.tag }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          PRERELEASE: ${{ github.event.workflow_run.head_branch != github.event.repository.default_branch }}
         run: |
           if [[ -n "${INPUT_TAG}" ]]; then
             tag="${INPUT_TAG}"
           else
-            # The release job targets the commit it built.
-            tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" \
-              --jq ".[] | select(.target_commitish == \"${HEAD_SHA}\") | .tag_name" | head -n 1)"
+            # The release job targets the commit it built. Several branches can be at the same commit, so pre-releases
+            # are told apart by the run number ending their name (see `release-name` in runner.yml).
+            tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.target_commitish == env.HEAD_SHA and (.prerelease | tostring) == env.PRERELEASE
+                and ((.prerelease | not) or (.tag_name | endswith("." + env.RUN_NUMBER)))) | .tag_name' | head -n 1)"
           fi
           if [[ -z "${tag}" ]]; then
             echo "::notice::No release was published for ${HEAD_SHA}, nothing to do."

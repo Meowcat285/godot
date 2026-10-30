@@ -1,8 +1,13 @@
 name: 🍎 macOS Signing
 on:
   workflow_call:
+    inputs:
+      notarize:
+        description: Notarize the signed app. Apple limits notarizations per day, so pre-releases are only signed.
+        type: boolean
+        default: true
 
-# Signs and notarizes the macOS editor app, then uploads it as the `macos-editor-mono-signed` artifact,
+# Signs and (unless disabled) notarizes the macOS editor app, then uploads it as the `macos-editor-mono-signed` artifact,
 # which `misc/scripts/package_release.py` uses for the release instead of the unsigned app.
 # Signing is skipped (and the release ships the unsigned app) when none of the secrets are set.
 jobs:
@@ -115,7 +120,7 @@ jobs:
           codesign --verify --strict --deep --verbose=2 "${APP}"
 
       - name: Notarize
-        if: steps.secrets.outputs.enabled == 'true'
+        if: steps.secrets.outputs.enabled == 'true' && inputs.notarize
         env:
           API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}

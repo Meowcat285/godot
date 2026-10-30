@@ -1,7 +1,8 @@
 name: 🔗 GHA
 on:
+  # Pushes to other branches publish pre-release builds (see `release-name`).
   push:
-    branches: [slop]
+    branches-ignore: [gh-readonly-queue/**]
   pull_request:
   merge_group:
   workflow_dispatch:
@@ -13,8 +14,13 @@ concurrency:
 jobs:
   # First stage: Only static checks, fast and prevent expensive builds from running.
 
+  # Pull requests only run for forks of collaborators: branches of this repository are already built on push, and
+  # pull requests from anyone else aren't built at all.
   static-checks:
-    if: ${{ !vars.DISABLE_GODOT_CI || github.run_attempt > 1 || github.event_name == 'workflow_dispatch' }}
+    if: >-
+      ${{ (!vars.DISABLE_GODOT_CI || github.run_attempt > 1 || github.event_name == 'workflow_dispatch')
+      && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name != github.repository
+      && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association))) }}
     name: 📊 Static checks
     uses: ./.github/workflows/static_checks.yml
 
@@ -22,28 +28,42 @@ jobs:
   # Determined before the builds, as the editor uses it as the version of its bundled GodotSharp NuGet packages
   # (see `nupkg-version` in the build workflows). Empty when the run won't publish a release, so the default versions are used.
   # Runs on the default branch don't overlap (see `concurrency`), so the name stays free until the release.
+  # Other branches get pre-releases named `<next release name>-<branch>.<run number>`, a valid NuGet pre-release
+  # version, where `<branch>` is the branch name with anything but letters, digits and dashes replaced by dashes.
+  # Meow Godot Launcher and `misc/scripts/generate_delta_patches.py` read the branch back from it.
   release-name:
     name: 🏷️ Release name
+    # After the static checks, so that no release is published when they're skipped and builds don't run.
+    needs: static-checks
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       name: ${{ steps.release-name.outputs.name }}
+      prerelease: ${{ steps.release-name.outputs.prerelease }}
     steps:
       - name: Determine release name
         id: release-name
-        if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == github.event.repository.default_branch }}
+        if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_type == 'branch' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           prefix="$(date -u +%Y).$(date -u +%-m)"
           last_build="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${prefix}." --jq '.[].ref' \
             | sed -n "s|^refs/tags/${prefix//./\\.}\.\([0-9]\+\)$|\1|p" \
             | sort -n | tail -n 1)"
           name="${prefix}.$(( ${last_build:-0} + 1 ))"
+          if [[ "${GITHUB_REF_NAME}" == "${DEFAULT_BRANCH}" ]]; then
+            prerelease=false
+          else
+            name="${name}-$(echo -n "${GITHUB_REF_NAME}" | tr -c '0-9A-Za-z-' '-').${GITHUB_RUN_NUMBER}"
+            prerelease=true
+          fi
           echo "Release name: ${name}"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
 
   # Second stage: Run all the builds and some of the tests.
   # Only Mono (C#) builds are run. Web is skipped since Mono doesn't support it.
@@ -88,7 +108,7 @@ jobs:
       nupkg-version: ${{ needs.release-name.outputs.name }}
 
   # Third stage: Publish the builds as a GitHub release.
-  # Only done for pushes (or manual runs) on the default branch, once all builds succeeded.
+  # Done for pushes (or manual runs) once all builds succeeded: releases on the default branch, pre-releases elsewhere.
 
   # Waits for approval when the `release` environment has a required reviewer. It comes before macOS signing
   # so that only builds going into a release are notarized (Apple limits notarizations per day).
@@ -105,18 +125,24 @@ jobs:
         run: echo "Release approved."
 
   # Only for releases, never for pull requests: the signing secrets are kept out of PR runs.
+  # Pre-releases are signed but not notarized, to save the daily notarization quota for releases.
+  # `release-approval` is skipped for pre-releases, hence `!failure()` rather than the default `success()`.
   macos-sign:
     name: 🍎 macOS signing
-    needs: release-approval
+    needs: [release-name, release-approval, android-build, ios-build, linux-build, macos-build, windows-build]
+    if: ${{ !cancelled() && !failure() && needs.release-name.outputs.name != '' }}
     uses: ./.github/workflows/macos_sign.yml
+    with:
+      notarize: ${{ needs.release-name.outputs.prerelease != 'true' }}
     secrets: inherit
 
   release:
     name: 📦 Release
     needs: [release-name, release-approval, macos-sign]
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == github.event.repository.default_branch }}
+    if: ${{ !cancelled() && !failure() && needs.macos-sign.result == 'success' }}
     uses: ./.github/workflows/release.yml
     with:
       release-name: ${{ needs.release-name.outputs.name }}
+      prerelease: ${{ needs.release-name.outputs.prerelease == 'true' }}
     permissions:
       contents: write
