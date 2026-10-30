@@ -24,6 +24,7 @@ import hashlib
 import json
 import multiprocessing
 import os
+import re
 import shutil
 import stat
 import struct
@@ -53,6 +54,22 @@ PACKAGES = {
 
 # Release and asset objects of the GitHub REST API.
 Json = dict[str, Any]
+
+# Pre-releases of branches other than the default one are named `<release name>-<branch>.<run number>`, where
+# `<branch>` is the branch name with anything but letters, digits and dashes replaced by dashes (see `release-name`
+# in `.github/workflows/runner.yml`). Must match `ReleaseInfo.cs` in the launcher.
+PRERELEASE_TAG = re.compile(r"^\d+\.\d+\.\d+-(?P<branch>[0-9A-Za-z-]+)\.\d+$")
+
+
+def branch_slug(branch: str) -> str:
+    return re.sub(r"[^0-9A-Za-z-]", "-", branch)
+
+
+def prerelease_branch(release: Json) -> str | None:
+    """The (slugged) branch of a pre-release, None for releases."""
+    match = PRERELEASE_TAG.match(release["tag_name"]) if release["prerelease"] else None
+    return match["branch"] if match else None
+
 
 # Archives inside packages whose entries are diffed individually, see `DeltaEncoder.plan_archive()`.
 # APKs and AARs are zips too: the Android templates aren't signed, and the editor rebuilds, aligns and signs the APK
@@ -141,9 +158,39 @@ class Releases:
         raise SystemExit(f'Release "{tag}" not found in {self.repo}.')
 
     def previous(self, tag: str, count: int) -> list[Json]:
+        """The releases to generate deltas from: the `count` previous releases, and the last pre-release of the
+        branch merged by the release's commit. For a pre-release, the previous pre-release of its branch, or for the
+        first one, the release before it."""
         target = self.get(tag)
         older = [r for r in self.releases if r["published_at"] < target["published_at"]]
-        return older[:count]
+        releases = [r for r in older if not r["prerelease"]]
+        if target["prerelease"]:
+            branch = prerelease_branch(target)
+            same_branch = [r for r in older if branch is not None and prerelease_branch(r) == branch]
+            return (same_branch or releases)[:1]
+
+        previous = releases[:count]
+        merged = self.merged_branch(target["target_commitish"])
+        last_build = next(
+            (r for r in older if merged is not None and prerelease_branch(r) == branch_slug(merged)), None
+        )
+        if last_build is not None:
+            log(f"Commit {target['target_commitish']} merged branch {merged}, last built as {last_build['tag_name']}.")
+            previous.append(last_build)
+        return previous
+
+    def merged_branch(self, commit: str) -> str | None:
+        """The branch of this repository merged by a pull request into `commit`, if any."""
+        try:
+            pulls: list[Json] = json.loads(gh("api", f"repos/{self.repo}/commits/{commit}/pulls"))
+        except subprocess.CalledProcessError as e:
+            log(f"::warning::Couldn't find the pull request merged by {commit}: {e.stderr.strip()}")
+            return None
+        for pull in pulls:
+            head_repo: Json | None = pull["head"]["repo"]
+            if pull["merge_commit_sha"] == commit and head_repo is not None and head_repo["full_name"] == self.repo:
+                return str(pull["head"]["ref"])
+        return None
 
     @staticmethod
     def find_asset(release: Json, suffix: str) -> Json | None:

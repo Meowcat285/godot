@@ -6,6 +6,10 @@ on:
         description: The name (and tag) of the release, from the `release-name` job in runner.yml.
         type: string
         required: true
+      prerelease:
+        description: Publish a pre-release, for builds of branches other than the default one.
+        type: boolean
+        default: false
 
 jobs:
   release:
@@ -32,6 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NAME: ${{ inputs.release-name }}
+          PRERELEASE: ${{ inputs.prerelease }}
         run: |
           cat > release-notes.md << EOF
           Automated build of commit ${GITHUB_SHA} (\`${GITHUB_REF_NAME}\`).
@@ -40,8 +45,13 @@ jobs:
           - **C# projects:** the editor bundles the \`GodotSharp\`, \`GodotSharpEditor\`, \`Godot.NET.Sdk\` and \`Godot.SourceGenerators\` packages as version \`${RELEASE_NAME}\`, sets new and opened projects to it, and registers them with NuGet.
           - **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
+          prerelease_flags=()
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            prerelease_flags=(--prerelease --latest=false)
+            echo "- **Pre-release:** the macOS editor is signed but not notarized, so macOS asks for confirmation before opening it the first time." >> release-notes.md
+          fi
           # The target commit is used by the editor to find the export templates matching its build.
-          gh release create "${RELEASE_NAME}" release/* \
+          gh release create "${RELEASE_NAME}" release/* "${prerelease_flags[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "${RELEASE_NAME}" \
