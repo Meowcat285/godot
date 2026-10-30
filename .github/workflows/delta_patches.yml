@@ -77,6 +77,9 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
           HISTORY: ${{ inputs.history || 2 }}
         run: |
+          # Deltas to pre-releases are made with xdelta3.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xdelta3
           python -m pip install --require-hashes --only-binary :all: -r misc/scripts/delta_requirements.txt
           python misc/scripts/generate_delta_patches.py \
             --tag "${TAG}" \

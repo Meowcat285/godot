@@ -16,8 +16,10 @@ if __name__ != "__main__":
 # Changed files are diffed with bsdiff, which handles the shifted addresses of recompiled executables
 # much better than generic compressors, and the result is compressed with zstd. The patch data format
 # (`MGBSDF01`) is read by `BsPatch.cs` in the launcher, keep both in sync.
+# Deltas to pre-releases use xdelta3 instead (`xpatch` operations, read by `VcdiffDecoder.cs`): it's several times
+# faster than bsdiff, for patches several times larger, which suits the many short-lived branch builds.
 #
-# Requires the `gh` CLI (authenticated), and the `bsdiff4` and `zstandard` Python packages.
+# Requires the `gh` and `xdelta3` CLIs, and the `bsdiff4` and `zstandard` Python packages.
 
 import argparse
 import hashlib
@@ -77,7 +79,8 @@ def prerelease_branch(release: Json) -> str | None:
 # when exporting, so their exact layout doesn't matter.
 NESTED_ARCHIVE_SUFFIXES = (".zip", ".apk", ".aar")
 
-ZSTD_LEVEL = 22
+# Level 22 takes over twice as long as 19 on bsdiff output, for patches only about 1% smaller.
+ZSTD_LEVEL = 19
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
 ZSTD_WINDOW_LOG = 27
 # Patches this many times smaller than the file compressed at `QUICK_LEVEL` are kept without trying the full file.
@@ -287,6 +290,20 @@ def write_patch(old_path: Path, new_path: Path, out_path: Path) -> int:
     return out_path.stat().st_size
 
 
+def write_xpatch(old_path: Path, new_path: Path, out_path: Path) -> int:
+    """Writes a zstd stream of a VCDIFF (RFC 3284) patch, without secondary compression, application header or
+    checksums, so the launcher only needs to decode plain VCDIFF. `-D` keeps xdelta3 from decompressing gzip or xz
+    files before diffing them, which the launcher can't undo."""
+    with open(out_path, "wb") as f, compressor().stream_writer(f, closefd=False) as w:
+        args = ["xdelta3", "-e", "-6", "-S", "none", "-A", "-n", "-D", "-c", "-s", str(old_path), str(new_path)]
+        with subprocess.Popen(args, stdout=subprocess.PIPE) as xdelta:
+            assert xdelta.stdout is not None
+            shutil.copyfileobj(xdelta.stdout, w, 1024 * 1024)
+        if xdelta.returncode != 0:
+            raise RuntimeError(f"xdelta3 failed with exit code {xdelta.returncode} on {new_path}.")
+    return out_path.stat().st_size
+
+
 def write_full(new_path: Path, out_path: Path) -> int:
     with open(new_path, "rb") as fin, open(out_path, "wb") as fout:
         compressor().copy_stream(fin, fout, size=new_path.stat().st_size)
@@ -299,7 +316,9 @@ def quick_full_size(new_path: Path) -> int:
         return int(zstandard.ZstdCompressor(level=QUICK_LEVEL).copy_stream(fin, null)[1])
 
 
-def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int, label: str) -> tuple[str, Path]:
+def encode_file(
+    old_path: Path | None, new_path: Path, out_dir: Path, index: int, label: str, xdelta: bool
+) -> tuple[str, Path]:
     """Returns the cheapest of a patch against `old_path` and the full file, as (op, data path)."""
     if new_path.stat().st_size >= SLOW_FILE_SIZE:
         log(f"    Encoding {label} ({mib(new_path.stat().st_size)}).")
@@ -308,13 +327,14 @@ def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int
         write_full(new_path, full)
         return "add", full
     patch = out_dir / f"{index}.patch"
-    patch_size = write_patch(old_path, new_path, patch)
+    kind = "xpatch" if xdelta else "patch"
+    patch_size = (write_xpatch if xdelta else write_patch)(old_path, new_path, patch)
     # Compressing a large file at `ZSTD_LEVEL` takes longer than diffing it, so skip it when it can't win.
     if patch_size * QUICK_MARGIN <= quick_full_size(new_path):
-        return "patch", patch
+        return kind, patch
     if patch_size < write_full(new_path, full):
         full.unlink()
-        return "patch", patch
+        return kind, patch
     patch.unlink()
     return "add", full
 
@@ -323,9 +343,10 @@ class DeltaEncoder:
     """Works out the operations turning a folder of old files into the new ones, encoding the data they need
     in the background."""
 
-    def __init__(self, pool: ProcessPoolExecutor, data_dir: Path):
+    def __init__(self, pool: ProcessPoolExecutor, data_dir: Path, xdelta: bool):
         self.pool = pool
         self.data_dir = data_dir
+        self.xdelta = xdelta
         self.next_index = 0
         self.pending: list[tuple[dict[str, object], FileInfo | None, Future[tuple[str, Path]]]] = []
         # Path shown in the log, size, and submission time of each file to encode.
@@ -364,7 +385,9 @@ class DeltaEncoder:
                     self.next_index += 1
                     old_path = old_dir / old.path if old is not None else None
                     label = prefix + new.path
-                    future = self.pool.submit(encode_file, old_path, new_dir / new.path, self.data_dir, index, label)
+                    future = self.pool.submit(
+                        encode_file, old_path, new_dir / new.path, self.data_dir, index, label, self.xdelta
+                    )
                     self.encoded[key] = (f"data/{index}", future)
                     self.labels[future] = (label, new.size, time.monotonic())
                 entry, future = self.encoded[key]
@@ -401,7 +424,7 @@ class DeltaEncoder:
         for op, old, future in self.pending:
             kind, path = future.result()
             op["op"] = kind
-            if kind == "patch":
+            if kind in ("patch", "xpatch"):
                 assert old is not None
                 op.update(source=old.path, source_sha256=old.sha256)
             data[str(op["entry"])] = path
@@ -452,6 +475,7 @@ def start_delta(
     old_files: dict[str, FileInfo],
     new_files: dict[str, FileInfo],
     work: Path,
+    xdelta: bool,
 ) -> PendingDelta:
     log(f"  Building {package} delta from {old_tag}.")
     delta_work = work / f"delta-{package}-{old_tag}"
@@ -459,7 +483,7 @@ def start_delta(
         shutil.rmtree(delta_work)
     data_dir = delta_work / "data"
     data_dir.mkdir(parents=True)
-    encoder = DeltaEncoder(pool, data_dir)
+    encoder = DeltaEncoder(pool, data_dir, xdelta)
     operations = encoder.plan(old_dir, old_files, state.new_dir, new_files)
     state.pending += 1
     pending = len(encoder.labels)
@@ -646,7 +670,17 @@ def main() -> None:
                     shutil.rmtree(old_dir)
                     continue
                 progress.add(
-                    start_delta(pool, state, package, old_release["tag_name"], old_dir, old_files, new_files, args.work)
+                    start_delta(
+                        pool,
+                        state,
+                        package,
+                        old_release["tag_name"],
+                        old_dir,
+                        old_files,
+                        new_files,
+                        args.work,
+                        xdelta=target["prerelease"],
+                    )
                 )
                 progress.poll(0)
 
