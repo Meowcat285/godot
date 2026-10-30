@@ -34,6 +34,8 @@ Always hold a You Aren't Gonna Need it mentality. Do not overengineer. Never exp
 
 Always spin up a sub agent with minimal context using a cheap model, with the job of reviewing your changes, to sus out possible problems with fresh eyes
 
+Run `git fetch origin` before creating a branch, because the container's clone may be stale.
+
 ## Unmerged upstream PRs
 
 Upstream PRs merged into this fork ahead of upstream are listed in `UPSTREAM_PRS.md`, with the head SHA merged and steps to re-sync them.
