@@ -159,15 +159,16 @@ class Releases:
 
     def previous(self, tag: str, count: int) -> list[Json]:
         """The releases to generate deltas from: the `count` previous releases, and the last pre-release of the
-        branch merged by the release's commit. For a pre-release, the previous pre-release of its branch, or for the
-        first one, the release before it."""
+        branch merged by the release's commit. For a pre-release, the release before it and the previous pre-release
+        of its branch. The launcher only applies one delta per update, so these are the only builds it can update
+        from without a full download."""
         target = self.get(tag)
         older = [r for r in self.releases if r["published_at"] < target["published_at"]]
         releases = [r for r in older if not r["prerelease"]]
         if target["prerelease"]:
             branch = prerelease_branch(target)
             same_branch = [r for r in older if branch is not None and prerelease_branch(r) == branch]
-            return (same_branch or releases)[:1]
+            return releases[:1] + same_branch[:1]
 
         previous = releases[:count]
         merged = self.merged_branch(target["target_commitish"])
