@@ -19,6 +19,22 @@ const vec3 lightmap_sg_lobe_axes[LIGHTMAP_SG_LOBE_COUNT] = vec3[](
 		vec3(0.72360680, -0.44721360, -0.52573111),
 		vec3(0.00000000, -1.00000000, 0.00000000));
 
+// Inverse of the lobes' Gram matrix (symmetric). The lightmap stores each lobe's projection of the baked light,
+// which is non-negative and compresses well; multiplying by this matrix gives the least-squares lobe amplitudes.
+const float lightmap_sg_inverse_gram[LIGHTMAP_SG_LOBE_COUNT * LIGHTMAP_SG_LOBE_COUNT] = float[](
+		2.17872364, -0.53897833, -0.53897833, -0.53897833, -0.53897833, -0.53897833, 0.25993963, 0.25993963, 0.25993963, 0.25993963, 0.25993963, -0.35896708,
+		-0.53897833, 2.17872364, -0.53897833, 0.25993963, 0.25993963, -0.53897833, -0.53897833, 0.25993963, -0.35896708, 0.25993963, -0.53897833, 0.25993963,
+		-0.53897833, -0.53897833, 2.17872364, -0.53897833, 0.25993963, 0.25993963, -0.53897833, -0.53897833, 0.25993963, -0.35896708, 0.25993963, 0.25993963,
+		-0.53897833, 0.25993963, -0.53897833, 2.17872364, -0.53897833, 0.25993963, 0.25993963, -0.53897833, -0.53897833, 0.25993963, -0.35896708, 0.25993963,
+		-0.53897833, 0.25993963, 0.25993963, -0.53897833, 2.17872364, -0.53897833, -0.35896708, 0.25993963, -0.53897833, -0.53897833, 0.25993963, 0.25993963,
+		-0.53897833, -0.53897833, 0.25993963, 0.25993963, -0.53897833, 2.17872364, 0.25993963, -0.35896708, 0.25993963, -0.53897833, -0.53897833, 0.25993963,
+		0.25993963, -0.53897833, -0.53897833, 0.25993963, -0.35896708, 0.25993963, 2.17872364, -0.53897833, 0.25993963, 0.25993963, -0.53897833, -0.53897833,
+		0.25993963, 0.25993963, -0.53897833, -0.53897833, 0.25993963, -0.35896708, -0.53897833, 2.17872364, -0.53897833, 0.25993963, 0.25993963, -0.53897833,
+		0.25993963, -0.35896708, 0.25993963, -0.53897833, -0.53897833, 0.25993963, 0.25993963, -0.53897833, 2.17872364, -0.53897833, 0.25993963, -0.53897833,
+		0.25993963, 0.25993963, -0.35896708, 0.25993963, -0.53897833, -0.53897833, 0.25993963, 0.25993963, -0.53897833, 2.17872364, -0.53897833, -0.53897833,
+		0.25993963, -0.53897833, 0.25993963, -0.35896708, 0.25993963, -0.53897833, -0.53897833, 0.25993963, 0.25993963, -0.53897833, 2.17872364, -0.53897833,
+		-0.35896708, 0.25993963, 0.25993963, 0.25993963, 0.25993963, 0.25993963, -0.53897833, -0.53897833, -0.53897833, -0.53897833, -0.53897833, 2.17872364);
+
 // Cosine-weighted integral of a lobe with unit amplitude, for a normal at angle acos(p_mu_dot_n) from the lobe axis.
 // Stephen Hill's fitted approximation: https://therealmjp.github.io/posts/sg-series-part-3-diffuse-lighting-from-an-sg-light-source/
 float lightmap_sg_irradiance(float p_mu_dot_n) {
@@ -48,7 +64,7 @@ float lightmap_sg_convolve(vec3 p_axis, vec3 p_dir, float p_sharpness) {
 	return normalization * (exp(d - sum) - exp(-d - sum)) / max(d, 1e-4);
 }
 
-// Reads the lobes at p_uvw (z = first layer of the slice) and returns, in lightmap units:
+// Reads the lobe projections at p_uvw (z = first layer of the slice) and returns, in lightmap units:
 // - r_diffuse: irradiance / PI for p_normal, like a regular lightmap sample.
 // - r_specular: radiance prefiltered by the GGX lobe around p_reflection, for use as indirect specular light.
 // All directions are in lightmap space.
@@ -59,24 +75,40 @@ void lightmap_sg_compute(texture2DArray p_tex, vec3 p_uvw, vec2 p_texture_size, 
 	float ndf_sharpness = 2.0 / (alpha * alpha);
 	float warped_sharpness = ndf_sharpness / (4.0 * max(p_NdotV, 1e-4));
 
+	// The result is linear in the amplitudes, so apply the inverse Gram matrix to the per-lobe weights
+	// (scalars) instead of to the projections (colors).
+	float diffuse_weights[LIGHTMAP_SG_LOBE_COUNT];
+	float specular_weights[LIGHTMAP_SG_LOBE_COUNT];
+	for (uint i = 0; i < LIGHTMAP_SG_LOBE_COUNT; i++) {
+		vec3 axis = lightmap_sg_lobe_axes[i];
+		diffuse_weights[i] = lightmap_sg_irradiance(dot(axis, p_normal));
+		specular_weights[i] = lightmap_sg_convolve(axis, p_reflection, warped_sharpness);
+	}
+
 	r_diffuse = vec3(0.0);
 	r_specular = vec3(0.0);
-	for (uint i = 0; i < LIGHTMAP_SG_LOBE_COUNT; i++) {
-		vec3 uvw = p_uvw + vec3(0.0, 0.0, float(i));
-		vec3 amplitude;
+	for (uint j = 0; j < LIGHTMAP_SG_LOBE_COUNT; j++) {
+		vec3 uvw = p_uvw + vec3(0.0, 0.0, float(j));
+		vec3 projection;
 		if (p_bicubic) {
-			amplitude = texture_array_bicubic(p_tex, uvw, p_texture_size).rgb;
+			projection = texture_array_bicubic(p_tex, uvw, p_texture_size).rgb;
 		} else {
-			amplitude = textureLod(sampler2DArray(p_tex, SAMPLER_LINEAR_CLAMP), uvw, 0.0).rgb;
+			projection = textureLod(sampler2DArray(p_tex, SAMPLER_LINEAR_CLAMP), uvw, 0.0).rgb;
 		}
 
-		vec3 axis = lightmap_sg_lobe_axes[i];
-		r_diffuse += amplitude * lightmap_sg_irradiance(dot(axis, p_normal));
-		r_specular += amplitude * lightmap_sg_convolve(axis, p_reflection, warped_sharpness);
+		float diffuse_weight = 0.0;
+		float specular_weight = 0.0;
+		for (uint i = 0; i < LIGHTMAP_SG_LOBE_COUNT; i++) {
+			float inverse_gram = lightmap_sg_inverse_gram[j * LIGHTMAP_SG_LOBE_COUNT + i];
+			diffuse_weight += inverse_gram * diffuse_weights[i];
+			specular_weight += inverse_gram * specular_weights[i];
+		}
+		r_diffuse += projection * diffuse_weight;
+		r_specular += projection * specular_weight;
 	}
 
 	r_diffuse = max(r_diffuse, vec3(0.0));
-	// Lobes store radiance / PI.
+	// The lightmap stores radiance / PI.
 	r_specular = max(r_specular * M_PI, vec3(0.0));
 }
 

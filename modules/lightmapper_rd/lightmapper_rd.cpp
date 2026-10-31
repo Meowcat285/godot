@@ -2164,7 +2164,9 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	/* DENOISE */
 
-	// SG lobes are solved after denoising, as the denoiser is guided by the (non-negative) lobe projections.
+	// L1 SH is packed before denoising. SG lightmaps are not packed: they store the lobe projections as is
+	// and the runtime solves for the lobe amplitudes, since the projections are non-negative and compress
+	// far better than the signed amplitudes.
 	if (p_bake_sh && !use_spherical_gaussians) {
 		SWAP(light_accum_tex, light_accum_tex2);
 		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
@@ -2217,14 +2219,6 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 			if (unlikely(error != BAKE_OK)) {
 				return error;
 			}
-		}
-	}
-
-	if (p_bake_sh && use_spherical_gaussians) {
-		SWAP(light_accum_tex, light_accum_tex2);
-		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
-		if (unlikely(error != BAKE_OK)) {
-			return error;
 		}
 	}
 

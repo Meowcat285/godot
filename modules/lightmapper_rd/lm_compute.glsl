@@ -1467,21 +1467,6 @@ void main() {
 #endif
 
 #ifdef MODE_PACK_L1_COEFFS
-#ifdef USE_SG_LIGHTMAPS
-	// Solve for the lobe amplitudes that best fit the projected light (least squares over the sphere).
-	vec4 sg_projection[SG_LOBE_COUNT];
-	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
-		sg_projection[j] = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), 0);
-	}
-
-	for (uint i = 0; i < SG_LOBE_COUNT; i++) {
-		vec3 amplitude = vec3(0.0);
-		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
-			amplitude += sg_inverse_gram[i * SG_LOBE_COUNT + j] * sg_projection[j].rgb;
-		}
-		imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + i), vec4(amplitude, sg_projection[i].a));
-	}
-#else
 	vec4 base_coeff = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, params.atlas_slice * 4), 0);
 	imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * 4), base_coeff);
 
@@ -1492,6 +1477,5 @@ void main() {
 
 		imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * 4 + i), c);
 	}
-#endif
 #endif
 }

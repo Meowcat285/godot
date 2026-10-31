@@ -2,7 +2,9 @@
 """Prints the Spherical Gaussian lightmap basis constants used by
 `lm_sg_inc.glsl` (bake) and `servers/rendering/renderer_rd/shaders/lightmap_sg_inc.glsl` (runtime).
 
-Run it again and paste the output into both files if the lobe layout or sharpness changes.
+Run it again and paste each section of the output into its file if the lobe layout or sharpness changes
+(the runtime file also needs its lobe axes updated). The bake stores the lobe projections, and only the
+runtime needs the inverse Gram matrix.
 Requires numpy.
 """
 
@@ -40,14 +42,15 @@ def gram_matrix(axes, sharpness):
 def main():
     axes = lobe_axes()
     inv = np.linalg.inv(gram_matrix(axes, SHARPNESS))
+    print("// --- modules/lightmapper_rd/lm_sg_inc.glsl ---")
     print(f"#define SG_LOBE_COUNT {len(axes)}")
     print(f"#define SG_SHARPNESS {SHARPNESS:.1f}")
     print()
     print("const vec3 sg_lobe_axes[SG_LOBE_COUNT] = vec3[](")
     print(",\n".join(f"\t\tvec3({a[0]:.8f}, {a[1]:.8f}, {a[2]:.8f})" for a in axes) + ");")
     print()
-    print("// Inverse of the lobes' Gram matrix, row-major.")
-    print("const float sg_inverse_gram[SG_LOBE_COUNT * SG_LOBE_COUNT] = float[](")
+    print("// --- servers/rendering/renderer_rd/shaders/lightmap_sg_inc.glsl ---")
+    print("const float lightmap_sg_inverse_gram[LIGHTMAP_SG_LOBE_COUNT * LIGHTMAP_SG_LOBE_COUNT] = float[](")
     rows = [", ".join(f"{v:.8f}" for v in row) for row in inv]
     print(",\n".join(f"\t\t{row}" for row in rows) + ");")
 
