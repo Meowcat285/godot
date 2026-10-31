@@ -33,7 +33,8 @@ seamless = true
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x5k2b"]
 albedo_texture = SubResource("NoiseTexture2D_bisa2")
 roughness_texture = SubResource("NoiseTexture2D_ka7wq")
-uv1_scale = Vector3(4, 4, 4)
+uv1_scale = Vector3(0.25, 0.25, 0.25)
+uv1_triplanar = true
 
 [sub_resource type="BoxMesh" id="BoxMesh_8cv3p"]
 lightmap_size_hint = Vector2i(124, 67)
@@ -74,7 +75,8 @@ seamless = true
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6tcb1"]
 albedo_texture = SubResource("NoiseTexture2D_mb7s7")
 roughness_texture = SubResource("NoiseTexture2D_voycu")
-uv1_scale = Vector3(2, 2, 2)
+uv1_scale = Vector3(0.5, 0.5, 0.5)
+uv1_triplanar = true
 
 [sub_resource type="BoxMesh" id="BoxMesh_0f4jx"]
 lightmap_size_hint = Vector2i(124, 67)
@@ -121,7 +123,8 @@ seamless = true
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_247ak"]
 albedo_texture = SubResource("NoiseTexture2D_kbdc6")
 roughness_texture = SubResource("NoiseTexture2D_u2pwx")
-uv1_scale = Vector3(2, 2, 2)
+uv1_scale = Vector3(0.5, 0.5, 0.5)
+uv1_triplanar = true
 
 [sub_resource type="BoxMesh" id="BoxMesh_qoumo"]
 lightmap_size_hint = Vector2i(65, 106)
@@ -188,6 +191,7 @@ albedo_texture = SubResource("NoiseTexture2D_xd51r")
 metallic = 1.0
 roughness = 0.1
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_tbcvo"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -215,6 +219,7 @@ seamless = true
 albedo_texture = SubResource("NoiseTexture2D_xhafx")
 roughness = 0.1
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_reub8"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -243,6 +248,7 @@ albedo_texture = SubResource("NoiseTexture2D_72p5s")
 metallic = 1.0
 roughness = 0.3
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_uaf8u"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -270,6 +276,7 @@ seamless = true
 albedo_texture = SubResource("NoiseTexture2D_qptem")
 roughness = 0.3
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_ghrkr"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -298,6 +305,7 @@ albedo_texture = SubResource("NoiseTexture2D_o8x6o")
 metallic = 1.0
 roughness = 0.5
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_6afqp"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -325,6 +333,7 @@ seamless = true
 albedo_texture = SubResource("NoiseTexture2D_rvwm4")
 roughness = 0.5
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_6j7rs"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -353,6 +362,7 @@ albedo_texture = SubResource("NoiseTexture2D_o8l77")
 metallic = 1.0
 roughness = 0.7
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_dq5ye"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -380,6 +390,7 @@ seamless = true
 albedo_texture = SubResource("NoiseTexture2D_bypl1")
 roughness = 0.7
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_5eu7g"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -408,6 +419,7 @@ albedo_texture = SubResource("NoiseTexture2D_081i7")
 metallic = 1.0
 roughness = 0.9
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_2aems"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -435,6 +447,7 @@ seamless = true
 albedo_texture = SubResource("NoiseTexture2D_wp0ul")
 roughness = 0.9
 roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_0jpyr"]
 lightmap_size_hint = Vector2i(14, 8)
@@ -453,91 +466,91 @@ background_mode = 2
 sky = SubResource("Sky_3nii0")
 tonemap_mode = 4
 
-[node name="Room" type="Node3D" unique_id=1841603839]
+[node name="Room" type="Node3D" unique_id=422967837]
 
-[node name="Floor" type="MeshInstance3D" parent="." unique_id=1156171679]
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=229069219]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
 mesh = SubResource("BoxMesh_8cv3p")
 
-[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=1220911815]
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=1951313168]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.1, 0)
 mesh = SubResource("BoxMesh_0f4jx")
 
-[node name="WallBack" type="MeshInstance3D" parent="." unique_id=2056164208]
+[node name="WallBack" type="MeshInstance3D" parent="." unique_id=2072487736]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -6.1)
 mesh = SubResource("BoxMesh_i0wn2")
 
-[node name="WallLeft" type="MeshInstance3D" parent="." unique_id=1928636910]
+[node name="WallLeft" type="MeshInstance3D" parent="." unique_id=1566540219]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.1, 2, 0)
 mesh = SubResource("BoxMesh_qoumo")
 
-[node name="WallRightA" type="MeshInstance3D" parent="." unique_id=649040962]
+[node name="WallRightA" type="MeshInstance3D" parent="." unique_id=2003662060]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 2, -4)
 mesh = SubResource("BoxMesh_ho83x")
 
-[node name="WallRightB" type="MeshInstance3D" parent="." unique_id=1885929540]
+[node name="WallRightB" type="MeshInstance3D" parent="." unique_id=1206846515]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 2, 4)
 mesh = SubResource("BoxMesh_nj41c")
 
-[node name="WallRightTop" type="MeshInstance3D" parent="." unique_id=578522261]
+[node name="WallRightTop" type="MeshInstance3D" parent="." unique_id=148844811]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 3.5, 0)
 mesh = SubResource("BoxMesh_4edck")
 
-[node name="Pillar" type="MeshInstance3D" parent="." unique_id=1502516735]
+[node name="Pillar" type="MeshInstance3D" parent="." unique_id=376535469]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 2, -2.5)
 mesh = SubResource("BoxMesh_uh4d7")
 
-[node name="Sphere0Metal" type="MeshInstance3D" parent="." unique_id=1389599763]
+[node name="Sphere0Metal" type="MeshInstance3D" parent="." unique_id=511028711]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.4, 1)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_tbcvo")
 
-[node name="Sphere0Dielectric" type="MeshInstance3D" parent="." unique_id=2133430216]
+[node name="Sphere0Dielectric" type="MeshInstance3D" parent="." unique_id=835789862]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.4, -0.5)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_reub8")
 
-[node name="Sphere1Metal" type="MeshInstance3D" parent="." unique_id=235023448]
+[node name="Sphere1Metal" type="MeshInstance3D" parent="." unique_id=630683939]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.4, 1)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_uaf8u")
 
-[node name="Sphere1Dielectric" type="MeshInstance3D" parent="." unique_id=1875911326]
+[node name="Sphere1Dielectric" type="MeshInstance3D" parent="." unique_id=2026877516]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.4, -0.5)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_ghrkr")
 
-[node name="Sphere2Metal" type="MeshInstance3D" parent="." unique_id=1375537994]
+[node name="Sphere2Metal" type="MeshInstance3D" parent="." unique_id=1741138250]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 1)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_6afqp")
 
-[node name="Sphere2Dielectric" type="MeshInstance3D" parent="." unique_id=582069251]
+[node name="Sphere2Dielectric" type="MeshInstance3D" parent="." unique_id=604654883]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -0.5)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_6j7rs")
 
-[node name="Sphere3Metal" type="MeshInstance3D" parent="." unique_id=738164574]
+[node name="Sphere3Metal" type="MeshInstance3D" parent="." unique_id=901262279]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.4, 1)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_dq5ye")
 
-[node name="Sphere3Dielectric" type="MeshInstance3D" parent="." unique_id=170084517]
+[node name="Sphere3Dielectric" type="MeshInstance3D" parent="." unique_id=1130904774]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.4, -0.5)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_5eu7g")
 
-[node name="Sphere4Metal" type="MeshInstance3D" parent="." unique_id=423868905]
+[node name="Sphere4Metal" type="MeshInstance3D" parent="." unique_id=236963447]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, 1)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_2aems")
 
-[node name="Sphere4Dielectric" type="MeshInstance3D" parent="." unique_id=1699123888]
+[node name="Sphere4Dielectric" type="MeshInstance3D" parent="." unique_id=606000073]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, -0.5)
 gi_lightmap_texel_scale = 4.0
 mesh = SubResource("SphereMesh_0jpyr")
 
-[node name="WarmLamp" type="OmniLight3D" parent="." unique_id=607483819]
+[node name="WarmLamp" type="OmniLight3D" parent="." unique_id=865584567]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 3, 3.5)
 light_color = Color(1, 0.75, 0.5, 1)
 light_energy = 3.0
@@ -546,7 +559,7 @@ light_bake_mode = 1
 shadow_enabled = true
 omni_range = 9.0
 
-[node name="CoolSpot" type="SpotLight3D" parent="." unique_id=2093560999]
+[node name="CoolSpot" type="SpotLight3D" parent="." unique_id=1970303162]
 transform = Transform3D(0.8660254, -0.43301272, 0.24999999, 0, 0.49999997, 0.86602545, -0.5, -0.75, 0.43301266, 3, 3.8, -4)
 light_color = Color(0.55, 0.7, 1, 1)
 light_energy = 6.0
@@ -555,16 +568,16 @@ shadow_enabled = true
 spot_range = 10.0
 spot_angle = 35.0
 
-[node name="Sun" type="DirectionalLight3D" parent="." unique_id=883642299]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=842714619]
 transform = Transform3D(0.34202015, -0.53898555, 0.76975113, 0, 0.81915206, 0.57357645, -0.9396926, -0.19617471, 0.2801665, 0, 0, 0)
 light_energy = 1.5
 light_bake_mode = 1
 shadow_enabled = true
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1909386504]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1498999226]
 environment = SubResource("Environment_byi2q")
 
-[node name="ReflectionProbe" type="ReflectionProbe" parent="." unique_id=1522867894]
+[node name="ReflectionProbe" type="ReflectionProbe" parent="." unique_id=1554063426]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
 size = Vector3(12, 4.2, 12)
 box_projection = true

@@ -3,18 +3,18 @@
 [ext_resource type="Script" path="res://viewer.gd" id="1_mt12o"]
 [ext_resource type="PackedScene" path="res://room.tscn" id="2_370qa"]
 
-[node name="SG" type="Node3D" unique_id=1488691253]
+[node name="SG" type="Node3D" unique_id=1345347961]
 script = ExtResource("1_mt12o")
 
-[node name="Room" type="Node3D" parent="." unique_id=1841603839 instance=ExtResource("2_370qa")]
+[node name="Room" type="Node3D" parent="." unique_id=422967837 instance=ExtResource("2_370qa")]
 
-[node name="LightmapGI" type="LightmapGI" parent="." unique_id=1382196161]
+[node name="LightmapGI" type="LightmapGI" parent="." unique_id=912186386]
 quality = 2
 directional = true
 use_spherical_gaussians = true
 interior = true
 texel_scale = 2.0
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=1287942249]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1360661443]
 transform = Transform3D(0.67267275, -0.10832254, 0.7319683, 0, 0.9892264, 0.14639366, -0.7399401, -0.098475024, 0.66542566, 4.5, 1.7, 4.5)
 fov = 65.0

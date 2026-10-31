@@ -50,6 +50,8 @@ func _material(albedo: Texture2D, roughness: Texture2D, metallic := 0.0, uv_scal
 	mat.roughness_texture = roughness
 	mat.roughness = 1.0
 	mat.metallic = metallic
+	# Triplanar mapping keeps the textures from stretching across the box faces. uv_scale is in tiles per meter.
+	mat.uv1_triplanar = true
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	return mat
 
@@ -75,13 +77,13 @@ func _build_room() -> Node3D:
 	# Glossy, slightly uneven floor; rough plaster walls; dark ceiling.
 	var floor_mat := _material(
 			_noise_texture(1, 0.02, Color(0.35, 0.33, 0.3), Color(0.6, 0.58, 0.55)),
-			_noise_texture(2, 0.05, Color(0.15, 0.15, 0.15), Color(0.5, 0.5, 0.5)), 0.0, 4.0)
+			_noise_texture(2, 0.05, Color(0.15, 0.15, 0.15), Color(0.5, 0.5, 0.5)), 0.0, 0.25)
 	var wall_mat := _material(
 			_noise_texture(3, 0.08, Color(0.7, 0.68, 0.62), Color(0.85, 0.83, 0.78)),
-			_noise_texture(4, 0.1, Color(0.7, 0.7, 0.7), Color(0.95, 0.95, 0.95)), 0.0, 2.0)
+			_noise_texture(4, 0.1, Color(0.7, 0.7, 0.7), Color(0.95, 0.95, 0.95)), 0.0, 0.5)
 	var red_mat := _material(
 			_noise_texture(5, 0.08, Color(0.6, 0.08, 0.05), Color(0.75, 0.15, 0.1)),
-			_noise_texture(6, 0.1, Color(0.6, 0.6, 0.6), Color(0.8, 0.8, 0.8)), 0.0, 2.0)
+			_noise_texture(6, 0.1, Color(0.6, 0.6, 0.6), Color(0.8, 0.8, 0.8)), 0.0, 0.5)
 
 	_box(root, "Floor", Vector3(12, 0.2, 12), Vector3(0, -0.1, 0), floor_mat)
 	_box(root, "Ceiling", Vector3(12, 0.2, 12), Vector3(0, 4.1, 0), wall_mat)
