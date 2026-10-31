@@ -958,8 +958,8 @@ LightmapperRD::BakeError LightmapperRD::_denoise_oidn(RenderingDevice *p_rd, RID
 		String fname_norm_in = EditorPaths::get_singleton()->get_cache_dir().path_join(vformat("temp_norm_%d.pfm", i));
 		_store_pfm(p_rd, p_source_normal_tex, i, p_atlas_size, fname_norm_in, false);
 
-		for (int j = 0; j < (p_bake_sh ? 4 : 1); j++) {
-			int index = i * (p_bake_sh ? 4 : 1) + j;
+		for (int j = 0; j < _get_slice_layer_count(p_bake_sh); j++) {
+			int index = i * _get_slice_layer_count(p_bake_sh) + j;
 			String fname_light_in = EditorPaths::get_singleton()->get_cache_dir().path_join(vformat("temp_light_%d.pfm", index));
 			String fname_out = EditorPaths::get_singleton()->get_cache_dir().path_join(vformat("temp_denoised_%d.pfm", index));
 
@@ -1026,7 +1026,7 @@ LightmapperRD::BakeError LightmapperRD::_denoise(RenderingDevice *p_rd, Ref<RDSh
 	denoise_params.normal_bandwidth = 0.1f;
 	denoise_params.filter_strength = 10.0f;
 	denoise_params.half_search_window = p_denoiser_range;
-	denoise_params.slice_count = p_bake_sh ? 4 : 1;
+	denoise_params.slice_count = _get_slice_layer_count(p_bake_sh);
 	p_rd->buffer_update(denoise_params_buffer, 0, sizeof(DenoiseParams), &denoise_params);
 
 	Vector<RD::Uniform> uniforms = dilate_or_denoise_common_uniforms(p_source_light_tex, p_dest_light_tex);
@@ -1060,9 +1060,9 @@ LightmapperRD::BakeError LightmapperRD::_denoise(RenderingDevice *p_rd, Ref<RDSh
 
 	// We denoise in fixed size regions and synchronize execution to avoid GPU timeouts.
 	// We use a region with 1/4 the amount of pixels if we're denoising SH lightmaps, as
-	// all four of them are denoised in the shader in one dispatch.
+	// all four of them are denoised in the shader in one dispatch (1/16 for the twelve SG lobes).
 	const int user_region_size = Math::nearest_power_of_2_templated(int(GLOBAL_GET("rendering/lightmapping/bake_performance/region_size")));
-	const int max_region_size = p_bake_sh ? user_region_size / 2 : user_region_size;
+	const int max_region_size = p_bake_sh ? user_region_size / (use_spherical_gaussians ? 4 : 2) : user_region_size;
 	int x_regions = Math::division_round_up(p_atlas_size.width, max_region_size);
 	int y_regions = Math::division_round_up(p_atlas_size.height, max_region_size);
 	for (int s = 0; s < p_atlas_slices; s++) {
@@ -1293,7 +1293,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 		rd->texture_clear(light_source_tex, Color(0, 0, 0, 0), 0, 1, 0, atlas_slices);
 
 		if (p_bake_sh) {
-			tf.array_layers *= 4;
+			tf.array_layers *= _get_slice_layer_count(p_bake_sh);
 		}
 		light_accum_tex = rd->texture_create(tf, RD::TextureView());
 		rd->texture_clear(light_accum_tex, Color(0, 0, 0, 0), 0, 1, 0, tf.array_layers);
@@ -1638,7 +1638,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	defines += "\n#define CLUSTER_SIZE " + uitos(cluster_size) + "\n";
 
 	if (p_bake_sh) {
-		defines += "\n#define USE_SH_LIGHTMAPS\n";
+		defines += use_spherical_gaussians ? "\n#define USE_SG_LIGHTMAPS\n" : "\n#define USE_SH_LIGHTMAPS\n";
 	}
 
 	if (p_texture_for_bounces) {
@@ -1902,7 +1902,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	}
 
 	if (p_bake_sh) {
-		for (int i = 0; i < atlas_slices * 4; i++) {
+		for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 			Vector<uint8_t> s = rd->texture_get_data(light_accum_tex, i);
 			Ref<Image> img = Image::create_from_data(atlas_size.width, atlas_size.height, false, Image::FORMAT_RGBAH, s);
 			img->save_exr("res://2_light_primary_accum_" + itos(i) + ".exr", false);
@@ -2164,7 +2164,8 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	/* DENOISE */
 
-	if (p_bake_sh) {
+	// SG lobes are solved after denoising, as the denoiser is guided by the (non-negative) lobe projections.
+	if (p_bake_sh && !use_spherical_gaussians) {
 		SWAP(light_accum_tex, light_accum_tex2);
 		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
 		if (unlikely(error != BAKE_OK)) {
@@ -2219,11 +2220,19 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 		}
 	}
 
+	if (p_bake_sh && use_spherical_gaussians) {
+		SWAP(light_accum_tex, light_accum_tex2);
+		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
+		if (unlikely(error != BAKE_OK)) {
+			return error;
+		}
+	}
+
 	/* DILATE */
 
 	{
 		SWAP(light_accum_tex, light_accum_tex2);
-		BakeError error = _dilate(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices * (p_bake_sh ? 4 : 1));
+		BakeError error = _dilate(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices * _get_slice_layer_count(p_bake_sh));
 		if (unlikely(error != BAKE_OK)) {
 			return error;
 		}
@@ -2239,7 +2248,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 #ifdef DEBUG_TEXTURES
 
-	for (int i = 0; i < atlas_slices * (p_bake_sh ? 4 : 1); i++) {
+	for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 		Vector<uint8_t> s = rd->texture_get_data(light_accum_tex, i);
 		Ref<Image> img = Image::create_from_data(atlas_size.width, atlas_size.height, false, Image::FORMAT_RGBAH, s);
 		img->save_exr("res://4_light_secondary_" + itos(i) + ".exr", false);
@@ -2278,12 +2287,12 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	{
 		//pre copy
-		for (int i = 0; i < atlas_slices * (p_bake_sh ? 4 : 1); i++) {
+		for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 			rd->texture_copy(light_accum_tex, light_accum_tex2, Vector3(), Vector3(), Vector3(atlas_size.width, atlas_size.height, 1), 0, 0, i, i);
 		}
 
 		Vector<RID> framebuffers;
-		for (int i = 0; i < atlas_slices * (p_bake_sh ? 4 : 1); i++) {
+		for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 			RID slice_tex = rd->texture_create_shared_from_slice(RD::TextureView(), light_accum_tex, i, 0);
 			Vector<RID> fb;
 			fb.push_back(slice_tex);
@@ -2321,7 +2330,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 		uint32_t triangle_offset = 0;
 
 		for (int i = 0; i < atlas_slices; i++) {
-			int subslices = (p_bake_sh ? 4 : 1);
+			int subslices = _get_slice_layer_count(p_bake_sh);
 
 			if (slice_seam_count[i] == 0) {
 				continue;
@@ -2395,7 +2404,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 #ifdef DEBUG_TEXTURES
 
-	for (int i = 0; i < atlas_slices * (p_bake_sh ? 4 : 1); i++) {
+	for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 		Vector<uint8_t> s = rd->texture_get_data(light_accum_tex, i);
 		Ref<Image> img = Image::create_from_data(atlas_size.width, atlas_size.height, false, Image::FORMAT_RGBAH, s);
 		img->save_exr("res://5_blendseams" + itos(i) + ".exr", false);
@@ -2406,7 +2415,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 		p_step_function(0.9, RTR("Retrieving textures"), p_bake_userdata, true);
 	}
 
-	for (int i = 0; i < atlas_slices * (p_bake_sh ? 4 : 1); i++) {
+	for (int i = 0; i < atlas_slices * _get_slice_layer_count(p_bake_sh); i++) {
 		Vector<uint8_t> s = rd->texture_get_data(light_accum_tex, i);
 		Ref<Image> img = Image::create_from_data(atlas_size.width, atlas_size.height, false, Image::FORMAT_RGBAH, s);
 		img->convert(Image::FORMAT_RGBH); //remove alpha

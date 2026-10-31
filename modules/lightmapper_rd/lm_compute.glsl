@@ -34,6 +34,9 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 #include "lm_area_lights_inc.glsl"
 #include "lm_common_inc.glsl"
+#ifdef USE_SG_LIGHTMAPS
+#include "lm_sg_inc.glsl"
+#endif
 
 #ifdef MODE_LIGHT_PROBES
 
@@ -92,6 +95,17 @@ layout(set = 1, binding = 4) uniform DenoiseParams {
 	uint slice_count;
 }
 denoise_params;
+#endif
+
+#if defined(MODE_DENOISE) && defined(USE_SG_LIGHTMAPS)
+// Sum of the lobe projections at a texel, used to guide the denoiser. It is roughly 3 times the irradiance.
+vec3 sg_denoise_guide(ivec2 p_pos, uint p_slice_base) {
+	vec3 sum = vec3(0.0);
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		sum += texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(p_pos, p_slice_base + j), 0).rgb;
+	}
+	return sum * (1.0 / 3.0);
+}
 #endif
 
 layout(push_constant, std430) uniform Params {
@@ -902,6 +916,12 @@ void main() {
 			vec4(0.0, 0.0, 0.0, 1.0),
 			vec4(0.0, 0.0, 0.0, 1.0));
 #endif
+#ifdef USE_SG_LIGHTMAPS
+	vec3 sg_accum[SG_LOBE_COUNT];
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		sg_accum[j] = vec3(0.0);
+	}
+#endif
 
 	// Use atlas position and a prime number as the seed.
 	uint noise = random_seed(ivec3(atlas_pos, 43573547));
@@ -947,6 +967,17 @@ void main() {
 				sh_accum[j].rgb += light * c[j] * bake_params.exposure_normalization;
 			}
 #endif
+#ifdef USE_SG_LIGHTMAPS
+			// Project the light onto the lobes as light arriving from light_dir.
+			// The output of trace_direct_light() is already attenuated by dot(normal, light_dir), so undo that here.
+			float sg_attenuation = dot(normal, light_dir);
+			if (sg_attenuation > 0.0001) {
+				vec3 sg_light = light / sg_attenuation * bake_params.exposure_normalization;
+				for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+					sg_accum[j] += sg_light * sg_lobe_weight(j, light_dir);
+				}
+			}
+#endif
 		}
 
 		light_for_bounces += light * lights.data[i].indirect_energy;
@@ -967,6 +998,10 @@ void main() {
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + 1), sh_accum[1]);
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + 2), sh_accum[2]);
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + 3), sh_accum[3]);
+#elif defined(USE_SG_LIGHTMAPS)
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), vec4(sg_accum[j], 1.0));
+	}
 #else
 	light_for_texture *= bake_params.exposure_normalization;
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice), vec4(light_for_texture, 1.0));
@@ -986,6 +1021,11 @@ void main() {
 			vec4(0.0, 0.0, 0.0, 1.0),
 			vec4(0.0, 0.0, 0.0, 1.0),
 			vec4(0.0, 0.0, 0.0, 1.0));
+#elif defined(USE_SG_LIGHTMAPS)
+	vec3 sg_accum[SG_LOBE_COUNT];
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		sg_accum[j] = vec3(0.0);
+	}
 #else
 	vec3 light_accum = vec3(0.0);
 #endif
@@ -1003,7 +1043,13 @@ void main() {
 	float texel_size_world_space = distance(position, neighbor_position);
 	uint noise = random_seed(ivec3(params.ray_from, atlas_pos));
 	for (uint i = params.ray_from; i < params.ray_to; i++) {
+#ifdef USE_SG_LIGHTMAPS
+		// Sample the hemisphere uniformly. Cosine-weighted sampling would make the lobe projection noisy near the horizon.
+		vec3 ray_dir = generate_sphere_uniform_direction(noise);
+		ray_dir = dot(ray_dir, normal) < 0.0 ? -ray_dir : ray_dir;
+#else
 		vec3 ray_dir = generate_ray_dir_from_normal(normal, noise);
+#endif
 		vec3 light = trace_indirect_light(position, ray_dir, noise, texel_size_world_space);
 
 #ifdef USE_SH_LIGHTMAPS
@@ -1022,6 +1068,11 @@ void main() {
 		for (uint j = 0; j < 4; j++) {
 			sh_accum[j].rgb += light * c[j];
 		}
+#elif defined(USE_SG_LIGHTMAPS)
+		// Monte Carlo projection of light / PI onto the lobes, with a uniform hemisphere pdf of 1 / (2 * PI).
+		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			sg_accum[j] += light * (2.0 * sg_lobe_weight(j, ray_dir));
+		}
 #else
 		light_accum += light;
 #endif
@@ -1033,6 +1084,12 @@ void main() {
 		vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + i));
 		accum.rgb += sh_accum[i].rgb / float(params.ray_count);
 		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + i), accum);
+	}
+#elif defined(USE_SG_LIGHTMAPS)
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j));
+		accum.rgb += sg_accum[j] / float(params.ray_count);
+		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), accum);
 	}
 #else
 	vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice));
@@ -1249,6 +1306,82 @@ void main() {
 	const uint slice_base = params.atlas_slice * slice_count;
 	const bool is_directional = (slice_count == 4);
 
+#ifdef USE_SG_LIGHTMAPS
+	// The shadowmask is denoised with the same shader, so check the layer count too.
+	if (slice_count == SG_LOBE_COUNT) {
+		// All lobes share the same filter weights so they stay consistent with each other. Denoising each lobe
+		// on its own blurs the small lobes across light edges more than the large ones, which leaves dark rings.
+		vec4 input_lobes[SG_LOBE_COUNT];
+		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			input_lobes[j] = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, slice_base + j), 0);
+		}
+		vec3 input_albedo = texelFetch(sampler2DArray(albedo_tex, linear_sampler), ivec3(atlas_pos, params.atlas_slice), 0).rgb;
+		vec3 input_normal = texelFetch(sampler2DArray(source_normal, linear_sampler), ivec3(atlas_pos, params.atlas_slice), 0).xyz;
+		vec3 denoised_lobes[SG_LOBE_COUNT];
+		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			denoised_lobes[j] = input_lobes[j].rgb;
+		}
+
+		if (length(input_normal) > EPSILON) {
+			float sum_weights = 0.0f;
+			vec3 accum_lobes[SG_LOBE_COUNT];
+			for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+				accum_lobes[j] = vec3(0.0f);
+			}
+
+			for (int search_y = -HALF_SEARCH_WINDOW; search_y <= HALF_SEARCH_WINDOW; search_y++) {
+				for (int search_x = -HALF_SEARCH_WINDOW; search_x <= HALF_SEARCH_WINDOW; search_x++) {
+					ivec2 search_pos = atlas_pos + ivec2(search_x, search_y);
+					vec3 search_albedo = texelFetch(sampler2DArray(albedo_tex, linear_sampler), ivec3(search_pos, params.atlas_slice), 0).rgb;
+					vec3 search_normal = texelFetch(sampler2DArray(source_normal, linear_sampler), ivec3(search_pos, params.atlas_slice), 0).xyz;
+					float search_occlusion = texelFetch(sampler2DArray(unocclude_mask, linear_sampler), ivec3(search_pos, params.atlas_slice), 0).r;
+					float patch_square_dist = 0.0f;
+					for (int offset_y = -HALF_PATCH_WINDOW; offset_y <= HALF_PATCH_WINDOW; offset_y++) {
+						for (int offset_x = -HALF_PATCH_WINDOW; offset_x <= HALF_PATCH_WINDOW; offset_x++) {
+							vec3 offset_delta_rgb = sg_denoise_guide(atlas_pos + ivec2(offset_x, offset_y), slice_base) - sg_denoise_guide(search_pos + ivec2(offset_x, offset_y), slice_base);
+							patch_square_dist += dot(offset_delta_rgb, offset_delta_rgb) - TWO_SIGMA_LIGHT_SQUARE;
+						}
+					}
+
+					patch_square_dist = max(0.0f, patch_square_dist / (3.0f * PATCH_WINDOW_DIMENSION_SQUARE));
+
+					// Same weights as the regular denoiser below.
+					float weight = 1.0f;
+					weight *= step(0, search_pos.x) * step(search_pos.x, bake_params.atlas_size.x - 1);
+					weight *= step(0, search_pos.y) * step(search_pos.y, bake_params.atlas_size.y - 1);
+					weight *= step(EPSILON, length(search_normal));
+					vec2 pixel_delta = vec2(search_x, search_y);
+					weight *= exp(-dot(pixel_delta, pixel_delta) / TWO_SIGMA_SPATIAL_SQUARE);
+					weight *= exp(-patch_square_dist / FILTER_SQUARE_TWO_SIGMA_LIGHT_SQUARE);
+					vec3 albedo_delta = input_albedo - search_albedo;
+					weight *= exp(-dot(albedo_delta, albedo_delta) / TWO_SIGMA_ALBEDO_SQUARE);
+					vec3 normal_delta = input_normal - search_normal;
+					weight *= exp(-dot(normal_delta, normal_delta) / TWO_SIGMA_NORMAL_SQUARE);
+					weight *= 1.0 - search_occlusion;
+
+					if (weight > 0.0f) {
+						for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+							accum_lobes[j] += weight * texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(search_pos, slice_base + j), 0).rgb;
+						}
+						sum_weights += weight;
+					}
+				}
+			}
+
+			if (sum_weights > EPSILON) {
+				for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+					denoised_lobes[j] = accum_lobes[j] / sum_weights;
+				}
+			}
+		}
+
+		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			imageStore(dest_light, ivec3(atlas_pos, slice_base + j), vec4(denoised_lobes[j], input_lobes[j].a));
+		}
+		return;
+	}
+#endif
+
 	for (uint i = 0; i < slice_count; i++) {
 		uint lightmap_slice = slice_base + i;
 		vec3 denoised_rgb = vec3(0.0f);
@@ -1334,6 +1467,21 @@ void main() {
 #endif
 
 #ifdef MODE_PACK_L1_COEFFS
+#ifdef USE_SG_LIGHTMAPS
+	// Solve for the lobe amplitudes that best fit the projected light (least squares over the sphere).
+	vec4 sg_projection[SG_LOBE_COUNT];
+	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		sg_projection[j] = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), 0);
+	}
+
+	for (uint i = 0; i < SG_LOBE_COUNT; i++) {
+		vec3 amplitude = vec3(0.0);
+		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			amplitude += sg_inverse_gram[i * SG_LOBE_COUNT + j] * sg_projection[j].rgb;
+		}
+		imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + i), vec4(amplitude, sg_projection[i].a));
+	}
+#else
 	vec4 base_coeff = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, params.atlas_slice * 4), 0);
 	imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * 4), base_coeff);
 
@@ -1344,5 +1492,6 @@ void main() {
 
 		imageStore(dest_light, ivec3(atlas_pos, params.atlas_slice * 4 + i), c);
 	}
+#endif
 #endif
 }
