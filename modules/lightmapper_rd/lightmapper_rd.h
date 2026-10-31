@@ -306,6 +306,13 @@ class LightmapperRD : public Lightmapper {
 	Ref<Image> _read_pfm(const String &p_name, bool p_shadowmask);
 	BakeError _denoise_oidn(RenderingDevice *p_rd, RID p_source_light_tex, RID p_source_normal_tex, RID p_dest_light_tex, const Size2i &p_atlas_size, int p_atlas_slices, bool p_bake_sh, bool p_shadowmask, const String &p_exe);
 
+	// Must match SG_LOBE_COUNT in lm_sg_inc.glsl.
+	static constexpr int SG_LOBE_COUNT = 12;
+	bool use_spherical_gaussians = false;
+
+	// Number of texture layers that make up one atlas slice of the light texture.
+	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LOBE_COUNT : 4) : 1; }
+
 public:
 	virtual void add_mesh(const MeshData &p_mesh) override;
 	virtual void add_directional_light(const String &p_name, bool p_static, const Vector3 &p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_angular_distance, float p_shadow_blur) override;
@@ -314,6 +321,7 @@ public:
 	virtual void add_area_light(const String &p_name, bool p_static, const Vector3 &p_position, const Vector3 &p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_range, float p_attenuation, const Vector3 &p_area_width, const Vector3 &p_area_height, float p_size, float p_shadow_blur, const Rect2 &p_texture_rect, float p_max_mipmap) override;
 	virtual void add_area_light_atlas(const Vector2i &p_size, int p_mipmap_count, const PackedByteArray &p_atlas_data) override;
 	virtual void add_probe(const Vector3 &p_position) override;
+	virtual void set_use_spherical_gaussians(bool p_enable) override { use_spherical_gaussians = p_enable; }
 	virtual BakeError bake(BakeQuality p_quality, bool p_use_denoiser, float p_denoiser_strength, int p_denoiser_range, int p_bounces, float p_bounce_indirect_energy, float p_bias, int p_max_texture_size, bool p_bake_sh, bool p_bake_shadowmask, bool p_texture_for_bounces, GenerateProbes p_generate_probes, const Ref<Image> &p_environment_panorama, const Basis &p_environment_transform, BakeStepFunc p_step_function = nullptr, void *p_bake_userdata = nullptr, float p_exposure_normalization = 1.0, float p_supersampling_factor = 1.0f) override;
 
 	int get_bake_texture_count() const override;

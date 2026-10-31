@@ -2354,6 +2354,13 @@ void LightStorage::lightmap_set_specular_intensity(RID p_lightmap, float p_inten
 	lm->specular_intensity = p_intensity;
 }
 
+void LightStorage::lightmap_set_uses_spherical_gaussians(RID p_lightmap, bool p_enable) {
+	Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+	ERR_FAIL_NULL(lm);
+
+	lm->uses_spherical_gaussians = p_enable;
+}
+
 /* LIGHTMAP INSTANCE */
 
 RID LightStorage::lightmap_instance_create(RID p_lightmap) {

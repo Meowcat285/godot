@@ -1,0 +1,4 @@
+.godot/
+*.lmbake
+*.exr
+*.exr.import
