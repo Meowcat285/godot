@@ -70,6 +70,22 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Build HDiffPatch
+        if: steps.release.outputs.tag != ''
+        env:
+          # v5.1.3, pinned by commit since this workflow can write release assets.
+          HDIFFPATCH_COMMIT: 3b9dca715ca492873bf2c49e22e5d5b7d2a78620
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libzstd-dev
+          git init -q "${RUNNER_TEMP}/HDiffPatch"
+          cd "${RUNNER_TEMP}/HDiffPatch"
+          git fetch -q --depth 1 https://github.com/sisong/HDiffPatch.git "${HDIFFPATCH_COMMIT}"
+          git checkout -q FETCH_HEAD
+          # Only zstd is needed: link the system library and leave out the other codecs and formats.
+          make -j"$(nproc)" LDEF=0 ZLIB=0 LZMA=0 ZSTD=2 BZIP2=0 BSD=0 VCD=0 MD5=0 XXH=0 hdiffz
+          echo "${RUNNER_TEMP}/HDiffPatch" >> "$GITHUB_PATH"
+
       - name: Generate delta patches
         if: steps.release.outputs.tag != ''
         env:

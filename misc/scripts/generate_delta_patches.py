@@ -13,11 +13,12 @@ if __name__ != "__main__":
 #   Zip archives inside packages (like `macos.zip` or the Android APKs in the export templates) get one operation
 #   per entry, as do archives inside them (like the AARs in `android_source.zip`).
 #
-# Changed files are diffed with bsdiff, which handles the shifted addresses of recompiled executables
-# much better than generic compressors, and the result is compressed with zstd. The patch data format
-# (`MGBSDF01`) is read by `BsPatch.cs` in the launcher, keep both in sync.
+# Changed files are diffed with HDiffPatch (`hdiffz`), which handles the shifted addresses of recompiled executables
+# much better than generic compressors, and compresses its patches with zstd. The launcher applies them with
+# SharpHDiffPatch. Older releases have bsdiff patches (`MGBSDF01`, the `patch` op), which the launcher still reads.
 #
-# Requires the `gh` CLI (authenticated), and the `bsdiff4` and `zstandard` Python packages.
+# Requires the `gh` CLI (authenticated), `hdiffz` (https://github.com/sisong/HDiffPatch) on the PATH, and the
+# `zstandard` Python package.
 
 import argparse
 import hashlib
@@ -27,7 +28,6 @@ import os
 import re
 import shutil
 import stat
-import struct
 import subprocess
 import sys
 import time
@@ -37,12 +37,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import bsdiff4.core  # type: ignore
 import zstandard  # type: ignore
 
 MANIFEST_NAME = "meow-launcher-manifest.json"
 MANIFEST_FORMAT = 1
-PATCH_MAGIC = b"MGBSDF01"
 
 # Must match `PackageKinds.cs` in the launcher.
 PACKAGES = {
@@ -77,7 +75,7 @@ def prerelease_branch(release: Json) -> str | None:
 # when exporting, so their exact layout doesn't matter.
 NESTED_ARCHIVE_SUFFIXES = (".zip", ".apk", ".aar")
 
-# Level 22 takes about 1.7x as long as 19 on bsdiff output, for patches only about 1% smaller.
+# Level 22 takes about 1.7x as long as 19 on patches, for patches only about 1% smaller.
 ZSTD_LEVEL = 19
 # Stay within the default window size limit of zstd decoders (2^27 bytes).
 ZSTD_WINDOW_LOG = 27
@@ -269,22 +267,13 @@ def has_symlinks(entries: dict[str, zipfile.ZipInfo]) -> bool:
 
 
 def write_patch(old_path: Path, new_path: Path, out_path: Path) -> int:
-    """Writes a `MGBSDF01` patch: the magic, then a zstd stream of bsdiff records
-    (int64 diff length, int64 extra length, int64 seek, diff bytes, extra bytes)."""
-    old = old_path.read_bytes()
-    new = new_path.read_bytes()
-    control, diff, extra = bsdiff4.core.diff(old, new)
-    del old, new
-    with open(out_path, "wb") as f:
-        f.write(PATCH_MAGIC)
-        with compressor().stream_writer(f, closefd=False) as w:
-            diff_pos = extra_pos = 0
-            for diff_len, extra_len, seek in control:
-                w.write(struct.pack("<qqq", diff_len, extra_len, seek))
-                w.write(diff[diff_pos : diff_pos + diff_len])
-                w.write(extra[extra_pos : extra_pos + extra_len])
-                diff_pos += diff_len
-                extra_pos += extra_len
+    """Writes an HDiffPatch patch (`HDIFF13`), compressed with zstd. `-block-0` skips the fast block match, which
+    makes patches of Godot binaries about 6% smaller in the same time. `hdiffz` also checks the patch it wrote."""
+    subprocess.run(
+        ["hdiffz", "-f", "-m", "-block-0", f"-c-zstd-{ZSTD_LEVEL}", str(old_path), str(new_path), str(out_path)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
     return out_path.stat().st_size
 
 
@@ -312,10 +301,10 @@ def encode_file(old_path: Path | None, new_path: Path, out_dir: Path, index: int
     patch_size = write_patch(old_path, new_path, patch)
     # Compressing a large file at `ZSTD_LEVEL` takes longer than diffing it, so skip it when it can't win.
     if patch_size * QUICK_MARGIN <= quick_full_size(new_path):
-        return "patch", patch
+        return "hpatch", patch
     if patch_size < write_full(new_path, full):
         full.unlink()
-        return "patch", patch
+        return "hpatch", patch
     patch.unlink()
     return "add", full
 
@@ -402,7 +391,7 @@ class DeltaEncoder:
         for op, old, future in self.pending:
             kind, path = future.result()
             op["op"] = kind
-            if kind == "patch":
+            if kind == "hpatch":
                 assert old is not None
                 op.update(source=old.path, source_sha256=old.sha256)
             data[str(op["entry"])] = path
@@ -573,7 +562,7 @@ def main() -> None:
         "--jobs",
         type=int,
         default=3,
-        help="Files to diff in parallel (each needs ~18x the file size in RAM, 3 fit in 16 GB with Godot binaries).",
+        help="Files to diff in parallel (each needs ~6x the file size in RAM).",
     )
     parser.add_argument("--work", type=Path, required=True, help="Scratch folder (downloads are cached in it).")
     parser.add_argument("--output", type=Path, required=True, help="Folder to write the release assets to.")
