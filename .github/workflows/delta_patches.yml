@@ -12,10 +12,6 @@ on:
         description: Tag of the release to generate delta patches for.
         type: string
         required: true
-      history:
-        description: Number of older releases to generate deltas from (ignored for pre-releases).
-        type: number
-        default: 2
 
 # One group per release: a single group would keep only one pending run, canceling older pending ones,
 # and the releases they were for would never get deltas. Runs for different releases don't share assets.
@@ -91,12 +87,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
-          HISTORY: ${{ inputs.history || 2 }}
         run: |
           python -m pip install --require-hashes --only-binary :all: -r misc/scripts/delta_requirements.txt
           python misc/scripts/generate_delta_patches.py \
             --tag "${TAG}" \
-            --history "${HISTORY}" \
             --work "${RUNNER_TEMP}/deltas" \
             --output delta-assets
 

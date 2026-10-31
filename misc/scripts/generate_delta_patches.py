@@ -3,12 +3,12 @@
 if __name__ != "__main__":
     raise SystemExit(f'Utility script "{__file__}" should not be used as a module!')
 
-# Generates delta patches between a GitHub release and the releases published before it,
+# Generates delta patches to a GitHub release from the build before it (see `Releases.previous()`),
 # for use by Meow Godot Launcher (https://github.com/Meowcat285/meow-godot-launcher).
 #
 # Outputs, to be uploaded as assets of the target release:
 # - `meow-launcher-manifest.json`: the files of each package (release asset) and the deltas available for it.
-# - `<package>.from-<tag>.mgdelta`: one delta per package and older release. A delta is an uncompressed zip
+# - `<package>.from-<tag>.mgdelta`: one delta per package. A delta is an uncompressed zip
 #   holding `delta.json` (one operation per file of the new package) and the data the operations need.
 #   Zip archives inside packages (like `macos.zip` or the Android APKs in the export templates) get one operation
 #   per entry, as do archives inside them (like the AARs in `android_source.zip`).
@@ -57,11 +57,6 @@ Json = dict[str, Any]
 # `<branch>` is the branch name with anything but letters, digits and dashes replaced by dashes (see `release-name`
 # in `.github/workflows/runner.yml`). Must match `ReleaseInfo.cs` in the launcher.
 PRERELEASE_TAG = re.compile(r"^\d+\.\d+\.\d+-(?P<branch>[0-9A-Za-z-]+)\.\d+$")
-
-
-def branch_slug(branch: str) -> str:
-    # Byte by byte, like `tr` in runner.yml.
-    return re.sub(rb"[^0-9A-Za-z-]", b"-", branch.encode()).decode()
 
 
 def prerelease_branch(release: Json) -> str | None:
@@ -157,41 +152,18 @@ class Releases:
                 return release
         raise SystemExit(f'Release "{tag}" not found in {self.repo}.')
 
-    def previous(self, tag: str, count: int) -> list[Json]:
-        """The releases to generate deltas from: the `count` previous releases, and the last pre-release of the
-        branch merged by the release's commit. For a pre-release, the release before it and the previous pre-release
-        of its branch. The launcher only applies one delta per update, so these are the only builds it can update
-        from without a full download."""
+    def previous(self, tag: str) -> list[Json]:
+        """The build to generate a delta from: the previous release, or for a pre-release, the previous pre-release of
+        its branch (the latest release for its first one). The launcher applies one delta per update, so this is the
+        only build it can update from without a full download."""
         target = self.get(tag)
         older = [r for r in self.releases if r["published_at"] < target["published_at"]]
         releases = [r for r in older if not r["prerelease"]]
         if target["prerelease"]:
             branch = prerelease_branch(target)
             same_branch = [r for r in older if branch is not None and prerelease_branch(r) == branch]
-            return releases[:1] + same_branch[:1]
-
-        previous = releases[:count]
-        merged = self.merged_branch(target["target_commitish"])
-        last_build = next(
-            (r for r in older if merged is not None and prerelease_branch(r) == branch_slug(merged)), None
-        )
-        if last_build is not None:
-            log(f"Commit {target['target_commitish']} merged branch {merged}, last built as {last_build['tag_name']}.")
-            previous.append(last_build)
-        return previous
-
-    def merged_branch(self, commit: str) -> str | None:
-        """The branch of this repository merged by a pull request into `commit`, if any."""
-        try:
-            pulls: list[Json] = json.loads(gh("api", f"repos/{self.repo}/commits/{commit}/pulls"))
-        except subprocess.CalledProcessError as e:
-            log(f"::warning::Couldn't find the pull request merged by {commit}: {e.stderr.strip()}")
-            return None
-        for pull in pulls:
-            head_repo: Json | None = pull["head"]["repo"]
-            if pull["merge_commit_sha"] == commit and head_repo is not None and head_repo["full_name"] == self.repo:
-                return str(pull["head"]["ref"])
-        return None
+            return (same_branch or releases)[:1]
+        return releases[:1]
 
     @staticmethod
     def find_asset(release: Json, suffix: str) -> Json | None:
@@ -558,7 +530,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate delta patches for Meow Godot Launcher.")
     parser.add_argument("--repo", default=os.getenv("GITHUB_REPOSITORY"), help="Repository, as `owner/name`.")
     parser.add_argument("--tag", required=True, help="Tag of the release to generate deltas to.")
-    parser.add_argument("--history", type=int, default=2, help="Number of older releases to generate deltas from.")
     parser.add_argument(
         "--jobs",
         type=int,
@@ -575,7 +546,7 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     releases = Releases(args.repo, args.work / "downloads")
     target = releases.get(args.tag)
-    previous = releases.previous(args.tag, args.history)
+    previous = releases.previous(args.tag)
     log(f"Generating deltas to {args.tag} from: {', '.join(r['tag_name'] for r in previous) or '(none)'}.")
 
     manifest: dict[str, object] = {
