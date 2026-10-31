@@ -96,6 +96,10 @@
 		<member name="use_denoiser" type="bool" setter="set_use_denoiser" getter="is_using_denoiser" default="true">
 			If [code]true[/code], uses a GPU-based denoising algorithm on the generated lightmap. This eliminates most noise within the generated lightmap at the cost of longer bake times. File sizes are generally not impacted significantly by the use of a denoiser, although lossless compression may do a better job at compressing a denoised image.
 		</member>
+		<member name="use_spherical_gaussians" type="bool" setter="set_use_spherical_gaussians" getter="is_using_spherical_gaussians" default="false">
+			If [code]true[/code] and [member directional] is [code]true[/code], lightmaps store incoming light as 12 Spherical Gaussian lobes per texel instead of L1 spherical harmonics. This gives more accurate directional diffuse lighting, and glossy specular reflections of baked lights and bounced light on rough surfaces. [member specular_intensity] is not used in this mode.
+			[b]Note:[/b] Spherical Gaussian lightmaps use 3 times as much video memory as regular directional lightmaps. They are only supported by the Forward+ and Mobile renderers. To see a difference, you need to bake lightmaps again after changing this property.
+		</member>
 		<member name="use_texture_for_bounces" type="bool" setter="set_use_texture_for_bounces" getter="is_using_texture_for_bounces" default="true">
 			If [code]true[/code], a texture with the lighting information will be generated to speed up the generation of indirect lighting at the cost of some accuracy. The geometry might exhibit extra light leak artifacts when using low resolution lightmaps or UVs that stretch the lightmap significantly across surfaces. Leave [member use_texture_for_bounces] at its default value of [code]true[/code] if unsure.
 			[b]Note:[/b] [member use_texture_for_bounces] only has an effect if [member bounces] is set to a value greater than or equal to [code]1[/code].
