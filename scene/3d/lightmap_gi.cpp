@@ -203,6 +203,7 @@ void LightmapGIData::clear() {
 
 void LightmapGIData::_reset_lightmap_textures() {
 	RS::get_singleton()->lightmap_set_textures(lightmap, combined_light_texture.is_valid() ? combined_light_texture->get_rid() : RID(), uses_spherical_harmonics);
+	RS::get_singleton()->lightmap_set_uses_spherical_gaussians(lightmap, _uses_spherical_gaussians);
 }
 
 void LightmapGIData::_reset_shadowmask_textures() {
@@ -224,6 +225,15 @@ void LightmapGIData::_set_uses_packed_directional(bool p_enable) {
 
 bool LightmapGIData::_is_using_packed_directional() const {
 	return _uses_packed_directional;
+}
+
+void LightmapGIData::_set_uses_spherical_gaussians(bool p_enable) {
+	_uses_spherical_gaussians = p_enable;
+	_reset_lightmap_textures();
+}
+
+bool LightmapGIData::_is_using_spherical_gaussians() const {
+	return _uses_spherical_gaussians;
 }
 
 void LightmapGIData::update_shadowmask_mode(ShadowmaskMode p_mode) {
@@ -356,6 +366,8 @@ void LightmapGIData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_using_spherical_harmonics"), &LightmapGIData::is_using_spherical_harmonics);
 
 	ClassDB::bind_method(D_METHOD("_set_uses_packed_directional", "_uses_packed_directional"), &LightmapGIData::_set_uses_packed_directional);
+	ClassDB::bind_method(D_METHOD("_set_uses_spherical_gaussians", "_uses_spherical_gaussians"), &LightmapGIData::_set_uses_spherical_gaussians);
+	ClassDB::bind_method(D_METHOD("_is_using_spherical_gaussians"), &LightmapGIData::_is_using_spherical_gaussians);
 	ClassDB::bind_method(D_METHOD("_is_using_packed_directional"), &LightmapGIData::_is_using_packed_directional);
 
 	ClassDB::bind_method(D_METHOD("add_user", "path", "uv_scale", "slice_index", "sub_instance"), &LightmapGIData::add_user);
@@ -372,6 +384,7 @@ void LightmapGIData::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_user_data", "_get_user_data");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "probe_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_probe_data", "_get_probe_data");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_packed_directional", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_packed_directional", "_is_using_packed_directional");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_spherical_gaussians", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_spherical_gaussians", "_is_using_spherical_gaussians");
 
 #ifndef DISABLE_DEPRECATED
 	ClassDB::bind_method(D_METHOD("set_light_texture", "light_texture"), &LightmapGIData::set_light_texture);
@@ -1480,6 +1493,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 	}
 
+	lightmapper->set_use_spherical_gaussians(directional && use_spherical_gaussians);
 	Lightmapper::BakeError bake_err = lightmapper->bake(Lightmapper::BakeQuality(bake_quality), use_denoiser, denoiser_strength, denoiser_range, bounces,
 			bounce_indirect_energy, bias, max_texture_size, directional, shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE, use_texture_for_bounces,
 			Lightmapper::GenerateProbes(gen_probes), environment_image, environment_transform, _lightmap_bake_step_function, &bsud, exposure_normalization, (supersampling_enabled ? supersampling_factor : 1));
@@ -1536,6 +1550,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 
 	gi_data->set_uses_spherical_harmonics(directional);
 	gi_data->_set_uses_packed_directional(directional); // New SH lightmaps are packed automatically.
+	gi_data->_set_uses_spherical_gaussians(directional && use_spherical_gaussians);
 
 	for (int i = 0; i < lightmapper->get_bake_mesh_count(); i++) {
 		Dictionary d = lightmapper->get_bake_mesh_userdata(i);
@@ -2014,6 +2029,16 @@ float LightmapGI::get_specular_intensity() const {
 	return specular_intensity;
 }
 
+void LightmapGI::set_use_spherical_gaussians(bool p_enable) {
+	use_spherical_gaussians = p_enable;
+
+	notify_property_list_changed();
+}
+
+bool LightmapGI::is_using_spherical_gaussians() const {
+	return use_spherical_gaussians;
+}
+
 void LightmapGI::set_specular_intensity(float p_strength) {
 	specular_intensity = p_strength;
 
@@ -2073,8 +2098,13 @@ void LightmapGI::_validate_property(PropertyInfo &p_property) const {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 	}
-	if (p_property.name == "specular_intensity") {
+	if (p_property.name == "use_spherical_gaussians") {
 		if (!directional) {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+	}
+	if (p_property.name == "specular_intensity") {
+		if (!directional || use_spherical_gaussians) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 	}
@@ -2150,6 +2180,9 @@ void LightmapGI::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_specular_intensity", "specular_intensity"), &LightmapGI::set_specular_intensity);
 	ClassDB::bind_method(D_METHOD("get_specular_intensity"), &LightmapGI::get_specular_intensity);
 
+	ClassDB::bind_method(D_METHOD("set_use_spherical_gaussians", "use_spherical_gaussians"), &LightmapGI::set_use_spherical_gaussians);
+	ClassDB::bind_method(D_METHOD("is_using_spherical_gaussians"), &LightmapGI::is_using_spherical_gaussians);
+
 	//	ClassDB::bind_method(D_METHOD("bake", "from_node"), &LightmapGI::bake, DEFVAL(Variant()));
 
 	ADD_GROUP("Tweaks", "");
@@ -2159,6 +2192,7 @@ void LightmapGI::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "bounces", PROPERTY_HINT_RANGE, "0,6,1,or_greater"), "set_bounces", "get_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bounce_indirect_energy", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_bounce_indirect_energy", "get_bounce_indirect_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "directional"), "set_directional", "is_directional");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_spherical_gaussians"), "set_use_spherical_gaussians", "is_using_spherical_gaussians");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "specular_intensity", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_specular_intensity", "get_specular_intensity");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay"), "set_shadowmask_mode", "get_shadowmask_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_texture_for_bounces"), "set_use_texture_for_bounces", "is_using_texture_for_bounces");

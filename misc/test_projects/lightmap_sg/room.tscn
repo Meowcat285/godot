@@ -1,0 +1,584 @@
+[gd_scene format=3]
+
+[sub_resource type="Gradient" id="Gradient_v321d"]
+colors = PackedColorArray(0.35, 0.33, 0.3, 1, 0.6, 0.58, 0.55, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_88gup"]
+seed = 1
+frequency = 0.02
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_bisa2"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_88gup")
+color_ramp = SubResource("Gradient_v321d")
+seamless = true
+
+[sub_resource type="Gradient" id="Gradient_4o3f6"]
+colors = PackedColorArray(0.15, 0.15, 0.15, 1, 0.5, 0.5, 0.5, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_v5vuv"]
+seed = 2
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ka7wq"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_v5vuv")
+color_ramp = SubResource("Gradient_4o3f6")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x5k2b"]
+albedo_texture = SubResource("NoiseTexture2D_bisa2")
+roughness_texture = SubResource("NoiseTexture2D_ka7wq")
+uv1_scale = Vector3(0.25, 0.25, 0.25)
+uv1_triplanar = true
+
+[sub_resource type="BoxMesh" id="BoxMesh_8cv3p"]
+lightmap_size_hint = Vector2i(124, 67)
+material = SubResource("StandardMaterial3D_x5k2b")
+add_uv2 = true
+size = Vector3(12, 0.2, 12)
+
+[sub_resource type="Gradient" id="Gradient_01y1d"]
+colors = PackedColorArray(0.7, 0.68, 0.62, 1, 0.85, 0.83, 0.78, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_42v8c"]
+seed = 3
+frequency = 0.08
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_mb7s7"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_42v8c")
+color_ramp = SubResource("Gradient_01y1d")
+seamless = true
+
+[sub_resource type="Gradient" id="Gradient_xorjj"]
+colors = PackedColorArray(0.7, 0.7, 0.7, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_xwbdb"]
+seed = 4
+frequency = 0.1
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_voycu"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_xwbdb")
+color_ramp = SubResource("Gradient_xorjj")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6tcb1"]
+albedo_texture = SubResource("NoiseTexture2D_mb7s7")
+roughness_texture = SubResource("NoiseTexture2D_voycu")
+uv1_scale = Vector3(0.5, 0.5, 0.5)
+uv1_triplanar = true
+
+[sub_resource type="BoxMesh" id="BoxMesh_0f4jx"]
+lightmap_size_hint = Vector2i(124, 67)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(12, 0.2, 12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_i0wn2"]
+lightmap_size_hint = Vector2i(65, 106)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(12, 4, 0.2)
+
+[sub_resource type="Gradient" id="Gradient_l46xq"]
+colors = PackedColorArray(0.6, 0.08, 0.05, 1, 0.75, 0.15, 0.1, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_v7lnt"]
+seed = 5
+frequency = 0.08
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_kbdc6"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_v7lnt")
+color_ramp = SubResource("Gradient_l46xq")
+seamless = true
+
+[sub_resource type="Gradient" id="Gradient_lha0o"]
+colors = PackedColorArray(0.6, 0.6, 0.6, 1, 0.8, 0.8, 0.8, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_qfj0j"]
+seed = 6
+frequency = 0.1
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_u2pwx"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_qfj0j")
+color_ramp = SubResource("Gradient_lha0o")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_247ak"]
+albedo_texture = SubResource("NoiseTexture2D_kbdc6")
+roughness_texture = SubResource("NoiseTexture2D_u2pwx")
+uv1_scale = Vector3(0.5, 0.5, 0.5)
+uv1_triplanar = true
+
+[sub_resource type="BoxMesh" id="BoxMesh_qoumo"]
+lightmap_size_hint = Vector2i(65, 106)
+material = SubResource("StandardMaterial3D_247ak")
+add_uv2 = true
+size = Vector3(0.2, 4, 12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ho83x"]
+lightmap_size_hint = Vector2i(24, 66)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(0.2, 4, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_nj41c"]
+lightmap_size_hint = Vector2i(24, 66)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(0.2, 4, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_4edck"]
+lightmap_size_hint = Vector2i(24, 36)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(0.2, 1, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_uh4d7"]
+lightmap_size_hint = Vector2i(12, 50)
+material = SubResource("StandardMaterial3D_6tcb1")
+add_uv2 = true
+size = Vector3(0.8, 4, 0.8)
+
+[sub_resource type="Gradient" id="Gradient_i44yh"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_yskd2"]
+seed = 8
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_xd51r"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_yskd2")
+color_ramp = SubResource("Gradient_i44yh")
+seamless = true
+
+[sub_resource type="Gradient" id="Gradient_ht40d"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_6o5vy"]
+seed = 7
+frequency = 0.2
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_4enyx"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_6o5vy")
+color_ramp = SubResource("Gradient_ht40d")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ab86n"]
+albedo_texture = SubResource("NoiseTexture2D_xd51r")
+metallic = 1.0
+roughness = 0.1
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_tbcvo"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_ab86n")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_hwwg3"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_4ehf0"]
+seed = 8
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_xhafx"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_4ehf0")
+color_ramp = SubResource("Gradient_hwwg3")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n451l"]
+albedo_texture = SubResource("NoiseTexture2D_xhafx")
+roughness = 0.1
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_reub8"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_n451l")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_cxymx"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_kmf18"]
+seed = 9
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_72p5s"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_kmf18")
+color_ramp = SubResource("Gradient_cxymx")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yja46"]
+albedo_texture = SubResource("NoiseTexture2D_72p5s")
+metallic = 1.0
+roughness = 0.3
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_uaf8u"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_yja46")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_8fxbm"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_fm864"]
+seed = 9
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_qptem"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_fm864")
+color_ramp = SubResource("Gradient_8fxbm")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sk81i"]
+albedo_texture = SubResource("NoiseTexture2D_qptem")
+roughness = 0.3
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_ghrkr"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_sk81i")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_gb0pv"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_my3gr"]
+seed = 10
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_o8x6o"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_my3gr")
+color_ramp = SubResource("Gradient_gb0pv")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8ej4o"]
+albedo_texture = SubResource("NoiseTexture2D_o8x6o")
+metallic = 1.0
+roughness = 0.5
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_6afqp"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_8ej4o")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_wobxb"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_66x4o"]
+seed = 10
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_rvwm4"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_66x4o")
+color_ramp = SubResource("Gradient_wobxb")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cqr3i"]
+albedo_texture = SubResource("NoiseTexture2D_rvwm4")
+roughness = 0.5
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_6j7rs"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_cqr3i")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_15st2"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_ah2k8"]
+seed = 11
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_o8l77"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_ah2k8")
+color_ramp = SubResource("Gradient_15st2")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xua20"]
+albedo_texture = SubResource("NoiseTexture2D_o8l77")
+metallic = 1.0
+roughness = 0.7
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_dq5ye"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_xua20")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_hm6i3"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_0a2dt"]
+seed = 11
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_bypl1"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_0a2dt")
+color_ramp = SubResource("Gradient_hm6i3")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eile6"]
+albedo_texture = SubResource("NoiseTexture2D_bypl1")
+roughness = 0.7
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_5eu7g"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_eile6")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_588cx"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_hnov2"]
+seed = 12
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_081i7"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_hnov2")
+color_ramp = SubResource("Gradient_588cx")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dj7nd"]
+albedo_texture = SubResource("NoiseTexture2D_081i7")
+metallic = 1.0
+roughness = 0.9
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_2aems"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_dj7nd")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="Gradient" id="Gradient_arqur"]
+colors = PackedColorArray(0.9, 0.9, 0.9, 1, 0.95, 0.95, 0.95, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_auvdx"]
+seed = 12
+frequency = 0.05
+fractal_octaves = 4
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_wp0ul"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_auvdx")
+color_ramp = SubResource("Gradient_arqur")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rl4sn"]
+albedo_texture = SubResource("NoiseTexture2D_wp0ul")
+roughness = 0.9
+roughness_texture = SubResource("NoiseTexture2D_4enyx")
+uv1_triplanar = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_0jpyr"]
+lightmap_size_hint = Vector2i(14, 8)
+material = SubResource("StandardMaterial3D_rl4sn")
+add_uv2 = true
+radius = 0.4
+height = 0.8
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_58gh5"]
+
+[sub_resource type="Sky" id="Sky_3nii0"]
+sky_material = SubResource("ProceduralSkyMaterial_58gh5")
+
+[sub_resource type="Environment" id="Environment_byi2q"]
+background_mode = 2
+sky = SubResource("Sky_3nii0")
+tonemap_mode = 4
+
+[node name="Room" type="Node3D" unique_id=422967837]
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=229069219]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+mesh = SubResource("BoxMesh_8cv3p")
+
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=1951313168]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.1, 0)
+mesh = SubResource("BoxMesh_0f4jx")
+
+[node name="WallBack" type="MeshInstance3D" parent="." unique_id=2072487736]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -6.1)
+mesh = SubResource("BoxMesh_i0wn2")
+
+[node name="WallLeft" type="MeshInstance3D" parent="." unique_id=1566540219]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.1, 2, 0)
+mesh = SubResource("BoxMesh_qoumo")
+
+[node name="WallRightA" type="MeshInstance3D" parent="." unique_id=2003662060]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 2, -4)
+mesh = SubResource("BoxMesh_ho83x")
+
+[node name="WallRightB" type="MeshInstance3D" parent="." unique_id=1206846515]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 2, 4)
+mesh = SubResource("BoxMesh_nj41c")
+
+[node name="WallRightTop" type="MeshInstance3D" parent="." unique_id=148844811]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.1, 3.5, 0)
+mesh = SubResource("BoxMesh_4edck")
+
+[node name="Pillar" type="MeshInstance3D" parent="." unique_id=376535469]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 2, -2.5)
+mesh = SubResource("BoxMesh_uh4d7")
+
+[node name="Sphere0Metal" type="MeshInstance3D" parent="." unique_id=511028711]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.4, 1)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_tbcvo")
+
+[node name="Sphere0Dielectric" type="MeshInstance3D" parent="." unique_id=835789862]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.4, -0.5)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_reub8")
+
+[node name="Sphere1Metal" type="MeshInstance3D" parent="." unique_id=630683939]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.4, 1)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_uaf8u")
+
+[node name="Sphere1Dielectric" type="MeshInstance3D" parent="." unique_id=2026877516]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.4, -0.5)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_ghrkr")
+
+[node name="Sphere2Metal" type="MeshInstance3D" parent="." unique_id=1741138250]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 1)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_6afqp")
+
+[node name="Sphere2Dielectric" type="MeshInstance3D" parent="." unique_id=604654883]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -0.5)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_6j7rs")
+
+[node name="Sphere3Metal" type="MeshInstance3D" parent="." unique_id=901262279]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.4, 1)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_dq5ye")
+
+[node name="Sphere3Dielectric" type="MeshInstance3D" parent="." unique_id=1130904774]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.4, -0.5)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_5eu7g")
+
+[node name="Sphere4Metal" type="MeshInstance3D" parent="." unique_id=236963447]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, 1)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_2aems")
+
+[node name="Sphere4Dielectric" type="MeshInstance3D" parent="." unique_id=606000073]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.4, -0.5)
+gi_lightmap_texel_scale = 4.0
+mesh = SubResource("SphereMesh_0jpyr")
+
+[node name="WarmLamp" type="OmniLight3D" parent="." unique_id=865584567]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 3, 3.5)
+light_color = Color(1, 0.75, 0.5, 1)
+light_energy = 3.0
+light_size = 0.2
+light_bake_mode = 1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="CoolSpot" type="SpotLight3D" parent="." unique_id=1970303162]
+transform = Transform3D(0.8660254, -0.43301272, 0.24999999, 0, 0.49999997, 0.86602545, -0.5, -0.75, 0.43301266, 3, 3.8, -4)
+light_color = Color(0.55, 0.7, 1, 1)
+light_energy = 6.0
+light_bake_mode = 1
+shadow_enabled = true
+spot_range = 10.0
+spot_angle = 35.0
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=842714619]
+transform = Transform3D(0.34202015, -0.53898555, 0.76975113, 0, 0.81915206, 0.57357645, -0.9396926, -0.19617471, 0.2801665, 0, 0, 0)
+light_energy = 1.5
+light_bake_mode = 1
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1498999226]
+environment = SubResource("Environment_byi2q")
+
+[node name="ReflectionProbe" type="ReflectionProbe" parent="." unique_id=1554063426]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+size = Vector3(12, 4.2, 12)
+box_projection = true
+interior = true

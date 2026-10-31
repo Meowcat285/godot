@@ -790,7 +790,10 @@ void RenderForwardMobile::_setup_lightmaps(const RenderDataRD *p_render_data, co
 
 		float &specular_intensity = scene_state.lightmaps[i].normal_xform_and_specular_intensity[3];
 		specular_intensity = light_storage->lightmap_get_specular_intensity(lightmap);
-		scene_state.lightmap_has_specular[i] = scene_state.lightmap_has_sh[i] && (specular_intensity > 0.0f);
+		// Spherical Gaussian lightmaps are flagged in the padding of the normal transform, and replace the specular approximation.
+		const bool uses_sg = scene_state.lightmap_has_sh[i] && light_storage->lightmap_uses_spherical_gaussians(lightmap);
+		scene_state.lightmaps[i].normal_xform_and_specular_intensity[7] = uses_sg ? 1.0f : 0.0f;
+		scene_state.lightmap_has_specular[i] = scene_state.lightmap_has_sh[i] && (specular_intensity > 0.0f) && !uses_sg;
 
 		scene_state.lightmaps_used++;
 	}

@@ -209,6 +209,7 @@ public:
 	virtual void lightmap_set_shadowmask_mode(RID p_lightmap, RSE::ShadowmaskMode p_mode) override {}
 	virtual float lightmap_get_specular_intensity(RID p_lightmap) override { return 0.0f; }
 	virtual void lightmap_set_specular_intensity(RID p_lightmap, float p_intensity) override {}
+	virtual void lightmap_set_uses_spherical_gaussians(RID p_lightmap, bool p_enable) override {}
 
 	/* LIGHTMAP INSTANCE */
 

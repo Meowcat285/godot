@@ -355,6 +355,7 @@ private:
 		RID shadow_texture;
 		RSE::ShadowmaskMode shadowmask_mode = RSE::SHADOWMASK_MODE_NONE;
 		bool uses_spherical_harmonics = false;
+		bool uses_spherical_gaussians = false;
 		bool interior = false;
 		AABB bounds = AABB(Vector3(), Vector3(1, 1, 1));
 		float baked_exposure = 1.0;
@@ -1044,6 +1045,7 @@ public:
 	virtual void lightmap_set_shadowmask_mode(RID p_lightmap, RSE::ShadowmaskMode p_mode) override;
 	virtual float lightmap_get_specular_intensity(RID p_lightmap) override;
 	virtual void lightmap_set_specular_intensity(RID p_lightmap, float p_intensity) override;
+	virtual void lightmap_set_uses_spherical_gaussians(RID p_lightmap, bool p_enable) override;
 
 	virtual float lightmap_get_probe_capture_update_speed() const override {
 		return lightmap_probe_capture_update_speed;
@@ -1068,6 +1070,10 @@ public:
 		ERR_FAIL_COND_V(!using_lightmap_array, false); //only for arrays
 		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
 		return lm->uses_spherical_harmonics;
+	}
+	_FORCE_INLINE_ bool lightmap_uses_spherical_gaussians(RID p_lightmap) const {
+		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+		return lm->uses_spherical_gaussians;
 	}
 	_FORCE_INLINE_ Vector2i lightmap_get_light_texture_size(RID p_lightmap) const {
 		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);

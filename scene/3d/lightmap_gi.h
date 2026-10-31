@@ -66,6 +66,7 @@ private:
 	bool interior = false;
 
 	bool _uses_packed_directional = false;
+	bool _uses_spherical_gaussians = false;
 
 	RID lightmap;
 	AABB bounds;
@@ -114,6 +115,9 @@ public:
 
 	void _set_uses_packed_directional(bool p_enable);
 	bool _is_using_packed_directional() const;
+
+	void _set_uses_spherical_gaussians(bool p_enable);
+	bool _is_using_spherical_gaussians() const;
 
 	void update_shadowmask_mode(ShadowmaskMode p_mode);
 	ShadowmaskMode get_shadowmask_mode() const;
@@ -212,6 +216,7 @@ private:
 	GenerateProbes gen_probes = GENERATE_PROBES_SUBDIV_8;
 	Ref<CameraAttributes> camera_attributes;
 	float specular_intensity = 0.0f;
+	bool use_spherical_gaussians = false;
 
 	Ref<LightmapGIData> light_data;
 	Node *last_owner = nullptr;
@@ -355,6 +360,9 @@ public:
 
 	float get_specular_intensity() const;
 	void set_specular_intensity(float p_strength);
+
+	void set_use_spherical_gaussians(bool p_enable);
+	bool is_using_spherical_gaussians() const;
 
 	AABB get_aabb() const override;
 

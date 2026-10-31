@@ -943,6 +943,7 @@ layout(location = 10) in flat uint instance_index_interp;
 
 #ifdef USE_LIGHTMAP
 #include "../bicubic_filter_inc.glsl"
+#include "../lightmap_sg_inc.glsl"
 #endif //USE_LIGHTMAP
 
 #ifdef USE_MULTIVIEW
@@ -1809,6 +1810,8 @@ void fragment_shader(in SceneData scene_data) {
 #ifdef USE_LIGHTMAP
 
 	//lightmap
+	vec3 lightmap_sg_specular = vec3(0.0);
+	float lightmap_sg_blend = 0.0;
 	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[instance_index].gi_offset;
 
@@ -1843,7 +1846,18 @@ void fragment_shader(in SceneData scene_data) {
 		uvw.xy = uv2 * instances.data[instance_index].lightmap_uv_scale.zw + instances.data[instance_index].lightmap_uv_scale.xy;
 		uvw.z = float(slice);
 
-		if (uses_sh) {
+		if (uses_sh && lightmaps.data[ofs].normal_xform_and_specular_intensity[1][3] > 0.5) {
+			// Spherical Gaussian lightmap.
+			uvw.z *= float(LIGHTMAP_SG_LOBE_COUNT);
+			mat3 sg_normal_xform = mat3(lightmaps.data[ofs].normal_xform_and_specular_intensity);
+			vec3 sg_normal = normalize(sg_normal_xform * indirect_normal);
+			vec3 sg_reflection = normalize(sg_normal_xform * reflect(-view, normal));
+			vec3 sg_diffuse;
+			lightmap_sg_compute(lightmap_textures[ofs], uvw, lightmaps.data[ofs].light_texture_size, sc_use_lightmap_bicubic_filter(), sg_normal, sg_reflection, roughness, max(dot(normal, view), 0.0), sg_diffuse, lightmap_sg_specular);
+			ambient_light += sg_diffuse * lightmaps.data[ofs].exposure_normalization;
+			lightmap_sg_specular *= lightmaps.data[ofs].exposure_normalization;
+			lightmap_sg_blend = lightmap_sg_specular_blend(roughness, max(dot(normal, view), 0.0));
+		} else if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
 			vec3 lm_light_l0;
 			vec3 lm_light_l1n1;
@@ -2203,6 +2217,11 @@ void fragment_shader(in SceneData scene_data) {
 		}
 #endif
 	}
+
+#ifdef USE_LIGHTMAP
+	// Spherical Gaussian lightmaps replace reflections on rough surfaces.
+	indirect_specular_light = mix(indirect_specular_light, lightmap_sg_specular, lightmap_sg_blend);
+#endif
 
 	//finalize ambient light here
 	{
