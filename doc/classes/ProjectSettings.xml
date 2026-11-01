@@ -1148,6 +1148,9 @@
 		<member name="editor/import/atlas_max_width" type="int" setter="" getter="" default="2048">
 			The maximum width to use when importing textures as an atlas. The value will be rounded to the nearest power of two when used. Use this to prevent imported textures from growing too large in the other direction.
 		</member>
+		<member name="editor/import/deferred_import" type="bool" setter="" getter="" default="false">
+			If [code]true[/code], files that need to be imported when the project is opened are imported the first time they're loaded in the editor instead, which makes opening a project with an empty import cache much faster. Files without a [code].import[/code] file are still imported immediately. All remaining files are imported before running or exporting the project.
+		</member>
 		<member name="editor/import/reimport_missing_imported_files" type="bool" setter="" getter="" default="true">
 		</member>
 		<member name="editor/import/use_multiple_threads" type="bool" setter="" getter="" default="true">

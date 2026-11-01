@@ -307,6 +307,7 @@ void register_editor_types() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "editor/naming/script_name_casing", PROPERTY_HINT_ENUM, "Auto,PascalCase,snake_case,kebab-case,camelCase"), ScriptLanguage::SCRIPT_NAME_CASING_AUTO);
 
 	GLOBAL_DEF("editor/import/reimport_missing_imported_files", true);
+	GLOBAL_DEF("editor/import/deferred_import", false);
 	GLOBAL_DEF("editor/import/use_multiple_threads", true);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "editor/import/atlas_max_width", PROPERTY_HINT_RANGE, "128,8192,1,or_greater"), 2048);

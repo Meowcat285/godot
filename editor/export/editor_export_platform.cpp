@@ -1300,6 +1300,9 @@ Error EditorExportPlatform::_export_project_files(const Ref<EditorExportPreset> 
 }
 
 Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &p_preset, bool p_debug, SaveFileFunction p_save_func, RemoveFileFunction p_remove_func, void *p_udata, SaveSharedObjectFunction p_so_func) {
+	// Only imported files can be exported.
+	EditorFileSystem::get_singleton()->import_deferred_files();
+
 	//figure out paths of files that will be exported
 	HashSet<String> paths;
 	Vector<String> path_remaps;

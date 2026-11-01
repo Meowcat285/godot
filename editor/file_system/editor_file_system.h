@@ -284,6 +284,13 @@ class EditorFileSystem : public Node {
 
 	bool reimport_on_missing_imported_files;
 
+	// Files whose import was deferred until they're loaded (`editor/import/deferred_import`).
+	HashSet<String> deferred_imports;
+	Mutex deferred_imports_mutex; // Protects `deferred_imports`.
+	Mutex deferred_import_lock; // Held while importing a deferred file on demand.
+	void _defer_reimports(Vector<String> &r_reimports);
+	bool _import_deferred_file(const String &p_path);
+
 	Vector<String> _get_dependencies(const String &p_path);
 
 	struct ImportFile {
@@ -404,6 +411,7 @@ public:
 	ResourceUID::ID get_file_uid(const String &p_path) const;
 
 	void reimport_files(const Vector<String> &p_files);
+	void import_deferred_files();
 	Error reimport_append(const String &p_file, const HashMap<StringName, Variant> &p_custom_options, const String &p_custom_importer, Variant p_generator_parameters);
 
 	void reimport_file_with_custom_parameters(const String &p_file, const String &p_importer, const HashMap<StringName, Variant> &p_custom_params);

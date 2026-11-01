@@ -552,6 +552,7 @@ void EditorFileSystem::_save_filesystem_cache() {
 	ERR_FAIL_COND_MSG(f.is_null(), "Cannot create file '" + fscache + "'. Check user write permissions.");
 
 	f->store_line(filesystem_settings_version_for_import);
+	MutexLock lock(deferred_imports_mutex);
 	_save_filesystem_cache(filesystem, f);
 }
 
@@ -1052,7 +1053,12 @@ bool EditorFileSystem::_update_scan_actions() {
 			return true;
 		}
 
-		reimport_files(reimports);
+		_defer_reimports(reimports);
+		if (reimports.is_empty()) {
+			ResourceUID::get_singleton()->update_cache();
+		} else {
+			reimport_files(reimports);
+		}
 	} else {
 		//reimport files will update the uid cache file so if nothing was reimported, update it manually
 		ResourceUID::get_singleton()->update_cache();
@@ -1136,7 +1142,9 @@ void EditorFileSystem::scan() {
 		// Set first_scan to false before the signals so the function doing_first_scan can return false
 		// in editor_node to start the export if needed.
 		first_scan = false;
-		ResourceImporter::load_on_startup = nullptr;
+		if (deferred_imports.is_empty()) {
+			ResourceImporter::load_on_startup = nullptr;
+		}
 		emit_signal(SNAME("filesystem_changed"));
 		emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
 	} else {
@@ -1795,7 +1803,9 @@ void EditorFileSystem::_notification(int p_what) {
 						first_scan = false;
 						scanning_changes = false;
 						done_importing = true;
-						ResourceImporter::load_on_startup = nullptr;
+						if (deferred_imports.is_empty()) {
+							ResourceImporter::load_on_startup = nullptr;
+						}
 						if (changed) {
 							emit_signal(SNAME("filesystem_changed"));
 						}
@@ -1815,7 +1825,9 @@ void EditorFileSystem::_notification(int p_what) {
 					// Set first_scan to false before the signals so the function doing_first_scan can return false
 					// in editor_node to start the export if needed.
 					first_scan = false;
-					ResourceImporter::load_on_startup = nullptr;
+					if (deferred_imports.is_empty()) {
+						ResourceImporter::load_on_startup = nullptr;
+					}
 					emit_signal(SNAME("filesystem_changed"));
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
 				}
@@ -1864,7 +1876,8 @@ void EditorFileSystem::_save_filesystem_cache(EditorFileSystemDirectory *p_dir, 
 		cache_string.append(file_info->file);
 		cache_string.append(type);
 		cache_string.append(itos(file_info->uid));
-		cache_string.append(itos(file_info->modified_time));
+		// Deferred files are saved as modified, so they're tested for reimport (and deferred again) on the next start.
+		cache_string.append(itos(!deferred_imports.is_empty() && deferred_imports.has(p_dir->get_file_path(i)) ? 0 : file_info->modified_time));
 		cache_string.append(itos(file_info->import_modified_time));
 		cache_string.append(itos(file_info->import_valid));
 		cache_string.append(file_info->import_group_file);
@@ -2816,6 +2829,11 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	print_verbose(vformat("EditorFileSystem: Importing file: %s", p_file));
 	uint64_t start_time = OS::get_singleton()->get_ticks_msec();
 
+	{
+		MutexLock lock(deferred_imports_mutex);
+		deferred_imports.erase(p_file);
+	}
+
 	EditorFileSystemDirectory *fs = nullptr;
 	int cpos = -1;
 	if (p_update_file_system) {
@@ -3465,6 +3483,101 @@ Error EditorFileSystem::reimport_append(const String &p_file, const HashMap<Stri
 	return ret;
 }
 
+void EditorFileSystem::_defer_reimports(Vector<String> &r_reimports) {
+	const bool defer_all = first_scan && bool(GLOBAL_GET("editor/import/deferred_import")) && !EditorNode::is_cmdline_mode();
+
+	MutexLock lock(deferred_imports_mutex);
+	if (!defer_all && deferred_imports.is_empty()) {
+		return;
+	}
+
+	Vector<String> reimports;
+	for (const String &path : r_reimports) {
+		// After the first scan, only files that are still deferred stay deferred when they change.
+		if (!defer_all && !deferred_imports.has(path)) {
+			reimports.push_back(path);
+			continue;
+		}
+
+		// Files without import settings are imported now, as are groups and importers that don't save a
+		// resource loaded through the `.import` file (e.g. translations, which are loaded directly).
+		Ref<ConfigFile> cf;
+		cf.instantiate();
+		EditorFileSystemDirectory *dir = nullptr;
+		int idx = -1;
+		if (cf->load(path + ".import") != OK || cf->has_section_key("remap", "group_file") || !_find_file(path, &dir, idx)) {
+			reimports.push_back(path);
+			continue;
+		}
+		Ref<ResourceImporter> importer = ResourceFormatImporter::get_singleton()->get_importer_by_name(cf->get_value("remap", "importer", ""));
+		if (importer.is_null() || importer->get_save_extension().is_empty()) {
+			reimports.push_back(path);
+			continue;
+		}
+
+		deferred_imports.insert(path);
+
+		// The type and UID can't be read from `.import` files before they're imported when the import cache keeps the
+		// imported paths, so they're set from the import settings.
+		EditorFileSystemDirectory::FileInfo *fi = dir->files[idx];
+		fi->type = importer->get_resource_type();
+		fi->import_valid = true;
+		ResourceUID::ID uid = ResourceUID::get_singleton()->text_to_id(cf->get_value("remap", "uid", ""));
+		if (uid != ResourceUID::INVALID_ID) {
+			fi->uid = uid;
+			if (ResourceUID::get_singleton()->has_id(uid)) {
+				ResourceUID::get_singleton()->set_id(uid, path);
+			} else {
+				ResourceUID::get_singleton()->add_id(uid, path);
+			}
+		}
+		// Up to date modification times prevent testing the file again until it changes.
+		fi->modified_time = FileAccess::get_modified_time(path);
+		fi->import_modified_time = FileAccess::get_modified_time(path + ".import");
+	}
+
+	if (reimports.size() != r_reimports.size()) {
+		print_verbose(vformat("EditorFileSystem: Deferred the import of %d files until they're loaded.", r_reimports.size() - reimports.size()));
+	}
+	r_reimports = reimports;
+}
+
+bool EditorFileSystem::_import_deferred_file(const String &p_path) {
+	// Importing on demand is serialized, so a file is never imported twice at the same time.
+	MutexLock import_lock(deferred_import_lock);
+	{
+		MutexLock lock(deferred_imports_mutex);
+		if (!deferred_imports.has(p_path)) {
+			return false;
+		}
+	}
+
+	// The filesystem can only be updated on the main thread, otherwise it's updated when the file is tested again.
+	const bool update_file_system = Thread::is_main_thread() && !scanning && !scanning_changes;
+	_reimport_file(p_path, HashMap<StringName, Variant>(), "", nullptr, update_file_system);
+	return true;
+}
+
+void EditorFileSystem::import_deferred_files() {
+	ERR_FAIL_COND_MSG(importing, "Can't import deferred files while importing.");
+
+	Vector<String> files;
+	{
+		MutexLock lock(deferred_imports_mutex);
+		for (const String &path : deferred_imports) {
+			if (FileAccess::exists(path)) {
+				files.push_back(path);
+			}
+		}
+		deferred_imports.clear();
+	}
+
+	if (!files.is_empty()) {
+		reimport_files(files);
+		_save_filesystem_cache();
+	}
+}
+
 Error EditorFileSystem::_resource_import(const String &p_path) {
 	Vector<String> files;
 	files.push_back(p_path);
@@ -3477,6 +3590,11 @@ Error EditorFileSystem::_resource_import(const String &p_path) {
 
 Ref<Resource> EditorFileSystem::_load_resource_on_startup(ResourceFormatImporter *p_importer, const String &p_path, Error *r_error, bool p_use_sub_threads, float *r_progress, ResourceLoaderConstants::CacheMode p_cache_mode) {
 	ERR_FAIL_NULL_V(p_importer, Ref<Resource>());
+
+	// Files whose import was deferred are imported the first time they're loaded.
+	if (singleton->_import_deferred_file(p_path) || !singleton->first_scan) {
+		return p_importer->load_internal(p_path, r_error, p_use_sub_threads, r_progress, p_cache_mode, false);
+	}
 
 	if (!FileAccess::exists(p_path)) {
 		ERR_FAIL_V_MSG(Ref<Resource>(), vformat("Failed loading resource: %s. The file doesn't seem to exist.", p_path));
