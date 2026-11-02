@@ -3552,8 +3552,12 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 		MutexLock lock(deferred_imports_mutex);
 		return deferred_imports.has(p_path);
 	};
-	if (!is_deferred()) {
-		return false;
+	{
+		// Also wait for an on-demand import of this file that is in progress (it's no longer deferred once started).
+		MutexLock lock(deferred_imports_mutex);
+		if (!deferred_imports.has(p_path) && !deferred_importing.has(p_path)) {
+			return false;
+		}
 	}
 
 	// Importing on demand is serialized, so a file is never imported twice at the same time.
@@ -3564,12 +3568,21 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 
 	// The filesystem can only be updated on the main thread, otherwise it's updated when the file is tested again.
 	const bool update_file_system = Thread::is_main_thread() && !scanning && !scanning_changes;
+	{
+		MutexLock lock(deferred_imports_mutex);
+		deferred_importing.insert(p_path);
+	}
 	_reimport_file(p_path, HashMap<StringName, Variant>(), "", nullptr, update_file_system);
+	{
+		MutexLock lock(deferred_imports_mutex);
+		deferred_importing.erase(p_path);
+	}
 	return true;
 }
 
 Error EditorFileSystem::import_deferred_files() {
 	ERR_FAIL_COND_V_MSG(importing, ERR_BUSY, "Can't import deferred files while importing.");
+	ERR_FAIL_COND_V_MSG(scanning, ERR_BUSY, "Can't import deferred files while scanning.");
 
 	Vector<String> files;
 	{

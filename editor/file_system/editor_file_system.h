@@ -286,7 +286,8 @@ class EditorFileSystem : public Node {
 
 	// Files whose import was deferred until they're loaded (`editor/import/deferred_import`).
 	HashSet<String> deferred_imports;
-	Mutex deferred_imports_mutex; // Protects `deferred_imports`.
+	HashSet<String> deferred_importing; // Deferred files being imported on demand.
+	Mutex deferred_imports_mutex; // Protects `deferred_imports` and `deferred_importing`.
 	Mutex deferred_import_lock; // Held while importing a deferred file on demand.
 	void _defer_reimports(Vector<String> &r_reimports);
 	bool _has_deferred_imports();
