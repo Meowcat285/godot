@@ -1142,7 +1142,7 @@ void EditorFileSystem::scan() {
 		// Set first_scan to false before the signals so the function doing_first_scan can return false
 		// in editor_node to start the export if needed.
 		first_scan = false;
-		if (deferred_imports.is_empty()) {
+		if (!_has_deferred_imports()) {
 			ResourceImporter::load_on_startup = nullptr;
 		}
 		emit_signal(SNAME("filesystem_changed"));
@@ -1803,7 +1803,7 @@ void EditorFileSystem::_notification(int p_what) {
 						first_scan = false;
 						scanning_changes = false;
 						done_importing = true;
-						if (deferred_imports.is_empty()) {
+						if (!_has_deferred_imports()) {
 							ResourceImporter::load_on_startup = nullptr;
 						}
 						if (changed) {
@@ -1825,7 +1825,7 @@ void EditorFileSystem::_notification(int p_what) {
 					// Set first_scan to false before the signals so the function doing_first_scan can return false
 					// in editor_node to start the export if needed.
 					first_scan = false;
-					if (deferred_imports.is_empty()) {
+					if (!_has_deferred_imports()) {
 						ResourceImporter::load_on_startup = nullptr;
 					}
 					emit_signal(SNAME("filesystem_changed"));
@@ -3542,14 +3542,24 @@ void EditorFileSystem::_defer_reimports(Vector<String> &r_reimports) {
 	r_reimports = reimports;
 }
 
+bool EditorFileSystem::_has_deferred_imports() {
+	MutexLock lock(deferred_imports_mutex);
+	return !deferred_imports.is_empty();
+}
+
 bool EditorFileSystem::_import_deferred_file(const String &p_path) {
+	auto is_deferred = [&]() {
+		MutexLock lock(deferred_imports_mutex);
+		return deferred_imports.has(p_path);
+	};
+	if (!is_deferred()) {
+		return false;
+	}
+
 	// Importing on demand is serialized, so a file is never imported twice at the same time.
 	MutexLock import_lock(deferred_import_lock);
-	{
-		MutexLock lock(deferred_imports_mutex);
-		if (!deferred_imports.has(p_path)) {
-			return false;
-		}
+	if (!is_deferred()) {
+		return true; // Imported by another thread meanwhile.
 	}
 
 	// The filesystem can only be updated on the main thread, otherwise it's updated when the file is tested again.
@@ -3558,8 +3568,8 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 	return true;
 }
 
-void EditorFileSystem::import_deferred_files() {
-	ERR_FAIL_COND_MSG(importing, "Can't import deferred files while importing.");
+Error EditorFileSystem::import_deferred_files() {
+	ERR_FAIL_COND_V_MSG(importing, ERR_BUSY, "Can't import deferred files while importing.");
 
 	Vector<String> files;
 	{
@@ -3569,13 +3579,17 @@ void EditorFileSystem::import_deferred_files() {
 				files.push_back(path);
 			}
 		}
-		deferred_imports.clear();
+		// Each file stays deferred until its import starts.
 	}
 
 	if (!files.is_empty()) {
 		reimport_files(files);
 		_save_filesystem_cache();
 	}
+
+	MutexLock lock(deferred_imports_mutex);
+	deferred_imports.clear(); // Removed files.
+	return OK;
 }
 
 Error EditorFileSystem::_resource_import(const String &p_path) {
@@ -3953,4 +3967,5 @@ EditorFileSystem::~EditorFileSystem() {
 	memdelete(filesystem);
 	filesystem = nullptr;
 	ResourceSaver::set_get_resource_id_for_path(nullptr);
+	ResourceImporter::load_on_startup = nullptr;
 }

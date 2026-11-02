@@ -35,7 +35,6 @@
 #include "core/os/os.h"
 #include "editor/debugger/editor_debugger_node.h"
 #include "editor/editor_node.h"
-#include "editor/file_system/editor_file_system.h"
 #include "editor/run/run_instances_dialog.h"
 #include "editor/settings/editor_settings.h"
 #include "main/main.h"
@@ -50,9 +49,6 @@ String EditorRun::get_running_scene() const {
 }
 
 Error EditorRun::run(const String &p_scene, const String &p_write_movie, const Vector<String> &p_run_args) {
-	// The project can only load imported files.
-	EditorFileSystem::get_singleton()->import_deferred_files();
-
 	List<String> args;
 
 	for (const String &a : Main::get_forwardable_cli_arguments(Main::CLI_SCOPE_PROJECT)) {

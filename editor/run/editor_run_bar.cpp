@@ -39,6 +39,7 @@
 #include "editor/editor_string_names.h"
 #include "editor/export/editor_export_platform.h"
 #include "editor/export/editor_export_preset.h"
+#include "editor/file_system/editor_file_system.h"
 #include "editor/gui/editor_bottom_panel.h"
 #include "editor/gui/editor_quick_open_dialog.h"
 #include "editor/gui/editor_toaster.h"
@@ -349,6 +350,11 @@ void EditorRunBar::_run_scene(const String &p_scene_path, const Vector<String> &
 
 	EditorNode::get_singleton()->try_autosave();
 	if (!EditorNode::get_singleton()->call_build()) {
+		return;
+	}
+
+	// The project can only load imported files.
+	if (EditorFileSystem::get_singleton()->import_deferred_files() != OK) {
 		return;
 	}
 
