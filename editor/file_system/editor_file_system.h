@@ -32,6 +32,7 @@
 
 #include "core/io/dir_access.h"
 #include "core/io/resource_loader_constants.h"
+#include "core/os/condition_variable.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
 #include "core/os/thread_safe.h"
@@ -286,9 +287,9 @@ class EditorFileSystem : public Node {
 
 	// Files whose import was deferred until they're loaded (`editor/import/deferred_import`).
 	HashSet<String> deferred_imports;
-	HashSet<String> deferred_importing; // Deferred files being imported on demand.
-	Mutex deferred_imports_mutex; // Protects `deferred_imports` and `deferred_importing`.
-	Mutex deferred_import_lock; // Held while importing a deferred file on demand.
+	HashSet<String> deferred_importing; // Deferred files being imported.
+	BinaryMutex deferred_imports_mutex; // Protects `deferred_imports` and `deferred_importing`.
+	ConditionVariable deferred_import_done; // Notified when the import of a deferred file ends.
 	void _defer_reimports(Vector<String> &r_reimports);
 	bool _has_deferred_imports();
 	bool _import_deferred_file(const String &p_path);

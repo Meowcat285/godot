@@ -2829,9 +2829,28 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	print_verbose(vformat("EditorFileSystem: Importing file: %s", p_file));
 	uint64_t start_time = OS::get_singleton()->get_ticks_msec();
 
+	// A deferred file is imported once at a time, and isn't deferred anymore once its import starts.
+	struct DeferredImportGuard {
+		EditorFileSystem *efs = nullptr;
+		String path;
+		~DeferredImportGuard() {
+			if (efs) {
+				MutexLock lock(efs->deferred_imports_mutex);
+				efs->deferred_importing.erase(path);
+				efs->deferred_import_done.notify_all();
+			}
+		}
+	} deferred_guard;
 	{
 		MutexLock lock(deferred_imports_mutex);
-		deferred_imports.erase(p_file);
+		while (deferred_importing.has(p_file)) {
+			deferred_import_done.wait(lock);
+		}
+		if (deferred_imports.erase(p_file)) {
+			deferred_importing.insert(p_file);
+			deferred_guard.efs = this;
+			deferred_guard.path = p_file;
+		}
 	}
 
 	EditorFileSystemDirectory *fs = nullptr;
@@ -3548,44 +3567,28 @@ bool EditorFileSystem::_has_deferred_imports() {
 }
 
 bool EditorFileSystem::_import_deferred_file(const String &p_path) {
-	auto is_deferred = [&]() {
-		MutexLock lock(deferred_imports_mutex);
-		return deferred_imports.has(p_path);
-	};
 	{
-		// Also wait for an on-demand import of this file that is in progress (it's no longer deferred once started).
+		// Wait for an import of this file in progress on another thread.
 		MutexLock lock(deferred_imports_mutex);
-		if (!deferred_imports.has(p_path) && !deferred_importing.has(p_path)) {
-			return false;
+		bool waited = false;
+		while (deferred_importing.has(p_path)) {
+			deferred_import_done.wait(lock);
+			waited = true;
 		}
-	}
-
-	// Importing on demand is serialized, so a file is never imported twice at the same time.
-	MutexLock import_lock(deferred_import_lock);
-	if (!is_deferred()) {
-		return true; // Imported by another thread meanwhile.
+		if (!deferred_imports.has(p_path)) {
+			return waited;
+		}
 	}
 
 	// The filesystem can only be updated on the main thread, otherwise it's updated when the file is tested again.
 	const bool update_file_system = Thread::is_main_thread() && !scanning && !scanning_changes;
-	{
-		MutexLock lock(deferred_imports_mutex);
-		deferred_importing.insert(p_path);
-	}
 	_reimport_file(p_path, HashMap<StringName, Variant>(), "", nullptr, update_file_system);
-	{
-		MutexLock lock(deferred_imports_mutex);
-		deferred_importing.erase(p_path);
-	}
 	return true;
 }
 
 Error EditorFileSystem::import_deferred_files() {
 	Vector<String> files;
 	{
-		// Wait for on-demand imports in progress on other threads, and keep new ones from starting until the files
-		// to import are collected. Holding the lock while importing them could deadlock with threaded importers.
-		MutexLock import_lock(deferred_import_lock);
 		MutexLock lock(deferred_imports_mutex);
 		for (const String &path : deferred_imports) {
 			if (FileAccess::exists(path)) {
@@ -3603,6 +3606,10 @@ Error EditorFileSystem::import_deferred_files() {
 	}
 
 	MutexLock lock(deferred_imports_mutex);
+	// Wait for on-demand imports still in progress on other threads.
+	while (!deferred_importing.is_empty()) {
+		deferred_import_done.wait(lock);
+	}
 	deferred_imports.clear(); // Removed files.
 	return OK;
 }
