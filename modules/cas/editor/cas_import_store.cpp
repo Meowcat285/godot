@@ -230,7 +230,12 @@ void CASImportStore::_load_sources() {
 	if (source_log_entries > sources.size() * 2 + 1024) {
 		_compact_source_log();
 	} else {
-		source_log = FileAccess::open(log_path, FileAccess::exists(log_path) ? FileAccess::READ_WRITE : FileAccess::WRITE);
+		if (!FileAccess::exists(log_path)) {
+			// Opened for writing, the file would only be created when it's closed (with a safe save), so projects
+			// run from the editor couldn't read it until then.
+			FileAccess::open(log_path, FileAccess::WRITE);
+		}
+		source_log = FileAccess::open(log_path, FileAccess::READ_WRITE);
 		if (source_log.is_valid()) {
 			source_log->seek_end();
 		}
