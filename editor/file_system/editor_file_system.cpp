@@ -3581,8 +3581,10 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 }
 
 Error EditorFileSystem::import_deferred_files() {
-	ERR_FAIL_COND_V_MSG(importing, ERR_BUSY, "Can't import deferred files while importing.");
-	ERR_FAIL_COND_V_MSG(scanning, ERR_BUSY, "Can't import deferred files while scanning.");
+	// Wait for on-demand imports in progress on other threads.
+	{
+		MutexLock import_lock(deferred_import_lock);
+	}
 
 	Vector<String> files;
 	{
@@ -3596,6 +3598,8 @@ Error EditorFileSystem::import_deferred_files() {
 	}
 
 	if (!files.is_empty()) {
+		ERR_FAIL_COND_V_MSG(importing, ERR_BUSY, "Can't import deferred files while importing.");
+		ERR_FAIL_COND_V_MSG(scanning || scanning_changes, ERR_BUSY, "Can't import deferred files while scanning.");
 		reimport_files(files);
 		_save_filesystem_cache();
 	}
