@@ -3581,13 +3581,11 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 }
 
 Error EditorFileSystem::import_deferred_files() {
-	// Wait for on-demand imports in progress on other threads.
-	{
-		MutexLock import_lock(deferred_import_lock);
-	}
-
 	Vector<String> files;
 	{
+		// Wait for on-demand imports in progress on other threads, and keep new ones from starting until the files
+		// to import are collected. Holding the lock while importing them could deadlock with threaded importers.
+		MutexLock import_lock(deferred_import_lock);
 		MutexLock lock(deferred_imports_mutex);
 		for (const String &path : deferred_imports) {
 			if (FileAccess::exists(path)) {
