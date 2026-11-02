@@ -2843,13 +2843,20 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 	} deferred_guard;
 	{
 		MutexLock lock(deferred_imports_mutex);
-		while (deferred_importing.has(p_file)) {
-			deferred_import_done.wait(lock);
-		}
-		if (deferred_imports.erase(p_file)) {
-			deferred_importing.insert(p_file);
+		if (deferred_import_claimed) {
+			// Already claimed by `_import_deferred_file()` on this thread.
+			deferred_import_claimed = false;
 			deferred_guard.efs = this;
 			deferred_guard.path = p_file;
+		} else {
+			while (deferred_importing.has(p_file)) {
+				deferred_import_done.wait(lock);
+			}
+			if (deferred_imports.erase(p_file)) {
+				deferred_importing.insert(p_file);
+				deferred_guard.efs = this;
+				deferred_guard.path = p_file;
+			}
 		}
 	}
 
@@ -3561,6 +3568,9 @@ void EditorFileSystem::_defer_reimports(Vector<String> &r_reimports) {
 	r_reimports = reimports;
 }
 
+// Set by `_import_deferred_file()` when it claims a file, consumed by the `_reimport_file()` call it makes.
+thread_local bool EditorFileSystem::deferred_import_claimed = false;
+
 bool EditorFileSystem::_has_deferred_imports() {
 	MutexLock lock(deferred_imports_mutex);
 	return !deferred_imports.is_empty();
@@ -3575,9 +3585,12 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 			deferred_import_done.wait(lock);
 			waited = true;
 		}
-		if (!deferred_imports.has(p_path)) {
+		if (!deferred_imports.erase(p_path)) {
 			return waited;
 		}
+		// Claim the file in the same lock as the check, so no other caller imports it too.
+		deferred_importing.insert(p_path);
+		deferred_import_claimed = true;
 	}
 
 	// The filesystem can only be updated on the main thread, otherwise it's updated when the file is tested again.

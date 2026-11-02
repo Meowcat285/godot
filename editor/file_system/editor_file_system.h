@@ -290,6 +290,7 @@ class EditorFileSystem : public Node {
 	HashSet<String> deferred_importing; // Deferred files being imported.
 	BinaryMutex deferred_imports_mutex; // Protects `deferred_imports` and `deferred_importing`.
 	ConditionVariable deferred_import_done; // Notified when the import of a deferred file ends.
+	static thread_local bool deferred_import_claimed;
 	void _defer_reimports(Vector<String> &r_reimports);
 	bool _has_deferred_imports();
 	bool _import_deferred_file(const String &p_path);
