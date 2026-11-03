@@ -17,7 +17,7 @@
 			[b]Note:[/b] Some hardware will have trouble with higher radiance sizes, especially [constant RADIANCE_SIZE_512] and above. Only use such high values on high-end hardware.
 		</member>
 		<member name="sky_material" type="Material" setter="set_material" getter="get_material">
-			[Material] used to draw the background. Can be [PanoramaSkyMaterial], [ProceduralSkyMaterial], [PhysicalSkyMaterial], or even a [ShaderMaterial] if you want to use your own custom shader.
+			[Material] used to draw the background. Can be [PanoramaSkyMaterial], [ProceduralSkyMaterial], [PhysicalSkyMaterial], [AtmosphereSkyMaterial], or even a [ShaderMaterial] if you want to use your own custom shader.
 		</member>
 	</members>
 	<constants>
