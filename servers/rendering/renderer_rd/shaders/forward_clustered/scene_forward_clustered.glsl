@@ -1811,6 +1811,7 @@ void fragment_shader(in SceneData scene_data) {
 
 	//lightmap
 	vec3 lightmap_sg_specular = vec3(0.0);
+	vec3 lightmap_sg_direct_specular = vec3(0.0); // For the SG specular debug view.
 	float lightmap_sg_blend = 0.0;
 	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[instance_index].gi_offset;
@@ -1866,6 +1867,7 @@ void fragment_shader(in SceneData scene_data) {
 				vec3 L_view = normalize(sg_direct_dir * sg_normal_xform);
 				vec3 f0 = F0(metallic, specular, albedo);
 				vec3 diffuse_light_discarded = diffuse_light;
+				vec3 direct_specular_before = vec3(direct_specular_light);
 				light_compute(normal, L_view, view, 0.0, sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization), true, 1.0, f0, roughness, metallic, 1.0, albedo, alpha, screen_uv, energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
@@ -1888,6 +1890,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 						diffuse_light_discarded,
 						direct_specular_light);
+				lightmap_sg_direct_specular = vec3(direct_specular_light) - direct_specular_before;
 			}
 		} else if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
@@ -3211,7 +3214,7 @@ void fragment_shader(in SceneData scene_data) {
 #else
 		emission = vec3(0.0);
 #if !defined(AMBIENT_LIGHT_DISABLED) && defined(USE_LIGHTMAP)
-		emission = lightmap_sg_specular;
+		emission = lightmap_sg_specular + lightmap_sg_direct_specular; // Includes the dominant baked light, which is shaded as a light.
 #endif
 		ambient_light = vec3(0.0);
 		diffuse_light = vec3(0.0);

@@ -1706,6 +1706,7 @@ void main() {
 
 	//lightmap
 	vec3 lightmap_sg_specular = vec3(0.0);
+	vec3 lightmap_sg_direct_specular = vec3(0.0); // For the SG specular debug view.
 	float lightmap_sg_blend = 0.0;
 	if (bool(instances.data[draw_call.instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[draw_call.instance_index].gi_offset;
@@ -1761,6 +1762,7 @@ void main() {
 				vec3 L_view_highp = normalize(sg_direct_dir * sg_normal_xform);
 				hvec3 f0 = F0(metallic, specular, albedo);
 				hvec3 diffuse_light_discarded = diffuse_light;
+				vec3 direct_specular_before = vec3(direct_specular_light);
 				light_compute(normal, hvec3(L_view_highp), view, saturateHalf(0.0), hvec3(sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization)), true, half(1.0), f0, roughness, metallic, half(1.0), albedo, alpha,
 						screen_uv, hvec3(1.0),
 #ifdef LIGHT_BACKLIGHT_USED
@@ -1777,6 +1779,7 @@ void main() {
 #endif
 						diffuse_light_discarded,
 						direct_specular_light);
+				lightmap_sg_direct_specular = vec3(direct_specular_light) - direct_specular_before;
 			}
 		} else if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
@@ -2440,7 +2443,7 @@ void main() {
 #else
 		emission = hvec3(0.0);
 #if !defined(AMBIENT_LIGHT_DISABLED) && defined(USE_LIGHTMAP)
-		emission = hvec3(lightmap_sg_specular);
+		emission = hvec3(lightmap_sg_specular + lightmap_sg_direct_specular); // Includes the dominant baked light, which is shaded as a light.
 #endif
 		ambient_light = hvec3(0.0);
 		diffuse_light = hvec3(0.0);
