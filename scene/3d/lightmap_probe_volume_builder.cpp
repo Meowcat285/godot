@@ -145,13 +145,13 @@ void LightmapProbeVolumeBuilder::finish_layout() {
 						}
 					}
 				}
+				if (probe_positions.size() > MAX_PROBES) {
+					ERR_PRINT(vformat("LightmapGI probe volume needs more than %d probes. Increase the probe volume spacing or lower its subdivisions.", MAX_PROBES));
+					probe_positions.clear();
+					probe_map.clear();
+					return;
+				}
 			}
-		}
-		if (probe_positions.size() > MAX_PROBES) {
-			ERR_PRINT(vformat("LightmapGI probe volume needs more than %d probes. Increase the probe volume spacing or lower its subdivisions.", MAX_PROBES));
-			probe_positions.clear();
-			probe_map.clear();
-			return;
 		}
 	}
 }

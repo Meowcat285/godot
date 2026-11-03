@@ -2233,10 +2233,11 @@ RID LightStorage::lightmap_probe_volume_fill_data(const PagedArray<RID> &p_light
 		if (!lm || lm->probe_volume_texture.is_null()) {
 			continue;
 		}
-		// Distance from the camera to the volume, in grid units (0 inside it).
+		// World space distance from the camera to the closest point of the volume (0 inside it).
 		const Vector3 cam_grid = (lm->probe_volume_grid_xform * li->transform.affine_inverse()).xform(p_cam_transform.origin);
-		const Vector3 grid_size = lm->probe_volume_grid_size;
-		const real_t distance = (cam_grid - cam_grid.clamp(Vector3(), grid_size)).length() / lm->probe_volume_grid_xform.basis.get_scale().x;
+		const Vector3 closest_grid = cam_grid.clamp(Vector3(), Vector3(lm->probe_volume_grid_size));
+		const Vector3 closest = li->transform.xform(lm->probe_volume_grid_xform.affine_inverse().xform(closest_grid));
+		const real_t distance = closest.distance_to(p_cam_transform.origin);
 		if (!best || distance < best_distance) {
 			best = lm;
 			best_xform = li->transform;
