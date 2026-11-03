@@ -349,7 +349,7 @@ void FileSystemDock::_create_tree(TreeItem *p_parent, EditorFileSystemDirectory 
 			if (main_scene_path == file_metadata) {
 				file_item->set_custom_color(0, get_theme_color(SNAME("accent_color"), EditorStringName(Editor)));
 			}
-			EditorResourcePreview::get_singleton()->queue_resource_preview(file_metadata, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, file_item->get_instance_id()));
+			_queue_tree_thumbnail(file_metadata, file_item);
 		}
 	} else if (lpath.get_base_dir() == current_path.get_base_dir()) {
 		subdirectory_item->select(0);
@@ -394,6 +394,7 @@ void FileSystemDock::_update_tree(const Vector<String> &p_uncollapsed_paths, boo
 	// Recreate the tree.
 	tree->clear();
 	tree_update_id++;
+	deferred_tree_thumbnails.clear();
 	updating_tree = true;
 	TreeItem *root = tree->create_item();
 	root->set_accept_children(false);
@@ -471,7 +472,7 @@ void FileSystemDock::_update_tree(const Vector<String> &p_uncollapsed_paths, boo
 		}
 
 		if (!favorite.ends_with("/")) {
-			EditorResourcePreview::get_singleton()->queue_resource_preview(favorite, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, ti->get_instance_id()));
+			_queue_tree_thumbnail(favorite, ti);
 		}
 	}
 
@@ -591,6 +592,8 @@ void FileSystemDock::_notification(int p_what) {
 
 			button_file_list_display_mode->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_toggle_file_display));
 			files->connect("item_activated", callable_mp(this, &FileSystemDock::_file_list_activate_file));
+			tree->connect(SceneStringName(draw), callable_mp(this, &FileSystemDock::_queue_visible_deferred_thumbnails), CONNECT_DEFERRED);
+			files->connect(SceneStringName(draw), callable_mp(this, &FileSystemDock::_queue_visible_deferred_thumbnails), CONNECT_DEFERRED);
 			button_hist_next->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_fw_history));
 			button_hist_prev->connect(SceneStringName(pressed), callable_mp(this, &FileSystemDock::_bw_history));
 			file_list_popup->connect(SceneStringName(id_pressed), callable_mp(this, &FileSystemDock::_file_list_rmb_option));
@@ -920,6 +923,61 @@ void FileSystemDock::_file_list_thumbnail_done(const String &p_path, const Ref<T
 	}
 }
 
+void FileSystemDock::_queue_tree_thumbnail(const String &p_path, TreeItem *p_item) {
+	if (EditorFileSystem::get_singleton()->is_deferred_import(p_path)) {
+		// Generating the thumbnail imports the file, so wait until it's on screen.
+		deferred_tree_thumbnails.push_back({ p_path, p_item->get_instance_id() });
+		return;
+	}
+	EditorResourcePreview::get_singleton()->queue_resource_preview(p_path, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, p_item->get_instance_id()));
+}
+
+void FileSystemDock::_queue_file_list_thumbnail(const String &p_path, int p_index) {
+	if (EditorFileSystem::get_singleton()->is_deferred_import(p_path)) {
+		// Generating the thumbnail imports the file, so wait until it's on screen.
+		deferred_file_thumbnails.push_back({ p_path, ObjectID(), p_index });
+		return;
+	}
+	EditorResourcePreview::get_singleton()->queue_resource_preview(p_path, callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(p_index, files->get_item_text(p_index)));
+}
+
+void FileSystemDock::_queue_visible_deferred_thumbnails() {
+	if (tree->is_visible_in_tree()) {
+		const Rect2 visible_rect(Point2(), tree->get_size());
+		for (uint32_t i = 0; i < deferred_tree_thumbnails.size();) {
+			const DeferredThumbnail &thumbnail = deferred_tree_thumbnails[i];
+			TreeItem *item = ObjectDB::get_instance<TreeItem>(thumbnail.tree_item);
+			bool visible = item && item->is_visible_in_tree() && tree->get_item_rect(item).intersects(visible_rect);
+			for (TreeItem *parent = item ? item->get_parent() : nullptr; visible && parent; parent = parent->get_parent()) {
+				visible = !parent->is_collapsed();
+			}
+			if (item && !visible) {
+				i++;
+				continue;
+			}
+			if (item) {
+				EditorResourcePreview::get_singleton()->queue_resource_preview(thumbnail.path, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, thumbnail.tree_item));
+			}
+			deferred_tree_thumbnails.remove_at_unordered(i);
+		}
+	}
+
+	if (files->is_visible_in_tree()) {
+		const Rect2 visible_rect(Point2(0, files->get_v_scroll_bar()->get_value()), files->get_size());
+		for (uint32_t i = 0; i < deferred_file_thumbnails.size();) {
+			const DeferredThumbnail &thumbnail = deferred_file_thumbnails[i];
+			if (thumbnail.file_index < files->get_item_count() && !files->get_item_rect(thumbnail.file_index).intersects(visible_rect)) {
+				i++;
+				continue;
+			}
+			if (thumbnail.file_index < files->get_item_count()) {
+				EditorResourcePreview::get_singleton()->queue_resource_preview(thumbnail.path, callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(thumbnail.file_index, files->get_item_text(thumbnail.file_index)));
+			}
+			deferred_file_thumbnails.remove_at_unordered(i);
+		}
+	}
+}
+
 void FileSystemDock::_tree_thumbnail_done(const String &p_path, const Ref<Texture2D> &p_preview, const Ref<Texture2D> &p_small_preview, int p_update_id, ObjectID p_item) {
 	TreeItem *item = ObjectDB::get_instance<TreeItem>(p_item);
 	if (item && tree_update_id == p_update_id && p_small_preview.is_valid()) {
@@ -1034,6 +1092,7 @@ void FileSystemDock::_update_file_list(bool p_keep_selection, const Vector<Strin
 	HashSet<int> valid_selection;
 
 	files->clear();
+	deferred_file_thumbnails.clear();
 
 	_set_current_path_line_edit_text(current_path);
 
@@ -1263,7 +1322,7 @@ void FileSystemDock::_update_file_list(bool p_keep_selection, const Vector<Strin
 
 		// Generate the preview.
 		if (!finfo->import_broken) {
-			EditorResourcePreview::get_singleton()->queue_resource_preview(fpath, callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(item_index, fname));
+			_queue_file_list_thumbnail(fpath, item_index);
 		}
 
 		// Select the items.

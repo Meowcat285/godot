@@ -3599,6 +3599,11 @@ bool EditorFileSystem::_import_deferred_file(const String &p_path) {
 	return true;
 }
 
+bool EditorFileSystem::is_deferred_import(const String &p_path) {
+	MutexLock lock(deferred_imports_mutex);
+	return deferred_imports.has(p_path);
+}
+
 Error EditorFileSystem::import_deferred_files() {
 	Vector<String> files;
 	{

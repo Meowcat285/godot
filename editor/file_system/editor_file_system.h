@@ -416,6 +416,7 @@ public:
 
 	void reimport_files(const Vector<String> &p_files);
 	Error import_deferred_files();
+	bool is_deferred_import(const String &p_path);
 	Error reimport_append(const String &p_file, const HashMap<StringName, Variant> &p_custom_options, const String &p_custom_importer, Variant p_generator_parameters);
 
 	void reimport_file_with_custom_parameters(const String &p_file, const String &p_importer, const HashMap<StringName, Variant> &p_custom_params);
