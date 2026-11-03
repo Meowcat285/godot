@@ -1,3 +1,4 @@
 Validate extension JSON: Error: Field 'classes/Sky/properties/sky_material': type changed value in new API, from "PanoramaSkyMaterial,ProceduralSkyMaterial,PhysicalSkyMaterial,ShaderMaterial" to "PanoramaSkyMaterial,ProceduralSkyMaterial,PhysicalSkyMaterial,AtmosphereSkyMaterial,ShaderMaterial".
+Validate extension JSON: Error: Field 'classes/Sky/properties/sky_material': type changed value in new API, from "ShaderMaterial,PanoramaSkyMaterial,ProceduralSkyMaterial,PhysicalSkyMaterial" to "PanoramaSkyMaterial,ProceduralSkyMaterial,PhysicalSkyMaterial,AtmosphereSkyMaterial,ShaderMaterial".
 
-Added AtmosphereSkyMaterial to the sky material hint (fork-only change, Meowcat285/godot#46). The property type is still Material, so this is compatible.
+Added AtmosphereSkyMaterial to the sky material hint (fork-only change, Meowcat285/godot#46). The property type is still Material, so this is compatible. The second line covers references older than 4.3, where the hint listed ShaderMaterial first.
