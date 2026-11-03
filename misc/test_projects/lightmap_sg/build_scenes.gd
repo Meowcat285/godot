@@ -10,6 +10,8 @@ func _init() -> void:
 
 	_save(_build_variant(true), "res://sg.tscn")
 	_save(_build_variant(false), "res://sh.tscn")
+	_save(_build_probe_variant(true), "res://probes_volume.tscn")
+	_save(_build_probe_variant(false), "res://probes_classic.tscn")
 	quit()
 
 
@@ -189,6 +191,59 @@ func _build_variant(spherical_gaussians: bool) -> Node3D:
 		# Show what the old approximation gives, for comparison.
 		lightmap.specular_intensity = 1.0
 	root.add_child(lightmap)
+
+	var camera := Camera3D.new()
+	camera.name = "Camera3D"
+	var eye := Vector3(4.5, 1.7, 4.5)
+	camera.transform = Transform3D(Basis.looking_at(Vector3(-1.0, 0.6, -0.5) - eye), eye)
+	camera.fov = 65.0
+	root.add_child(camera)
+
+	room.owner = root
+	lightmap.owner = root
+	camera.owner = root
+	return root
+
+
+# Dynamic objects lit by the light probes: with the adaptive probe volume (sampled per pixel), or the classic
+# tetrahedral probes (one value per object).
+func _build_probe_variant(probe_volume: bool) -> Node3D:
+	var root := Node3D.new()
+	root.name = "ProbeVolume" if probe_volume else "ProbesClassic"
+	root.set_script(load("res://viewer.gd"))
+
+	var room: Node3D = (load("res://room.tscn") as PackedScene).instantiate()
+	root.add_child(room)
+
+	var lightmap := LightmapGI.new()
+	lightmap.name = "LightmapGI"
+	lightmap.interior = true
+	lightmap.quality = LightmapGI.BAKE_QUALITY_HIGH
+	lightmap.probe_volume_enabled = probe_volume
+	lightmap.probe_volume_spacing = 0.5
+	root.add_child(lightmap)
+
+	# Large dynamic objects that span very different lighting: a tall column by the red wall, a long bar from the
+	# sunlit opening into the shadow of the room, and a big sphere under the warm lamp.
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.85, 0.85, 0.85)
+	white.roughness = 0.9
+	var objects := [
+		["Column", BoxMesh.new(), Vector3(0.6, 3.6, 0.6), Vector3(-5.2, 1.8, 2.0)],
+		["Bar", BoxMesh.new(), Vector3(7.5, 0.4, 0.4), Vector3(1.75, 1.0, 0.25)],
+		["Ball", SphereMesh.new(), Vector3(1.6, 1.6, 1.6), Vector3(-2.8, 0.8, 3.8)],
+	]
+	for o in objects:
+		var mesh: PrimitiveMesh = o[1]
+		mesh.material = white
+		var mi := MeshInstance3D.new()
+		mi.name = o[0]
+		mi.mesh = mesh
+		mi.scale = o[2]
+		mi.position = o[3]
+		mi.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+		root.add_child(mi)
+		mi.owner = root
 
 	var camera := Camera3D.new()
 	camera.name = "Camera3D"

@@ -17,4 +17,13 @@ use the Static bake mode. Textures are procedural (`NoiseTexture2D`), so nothing
    highlights, without bounce lighting). Drag with the left mouse button to orbit.
 3. To save a screenshot and quit: `godot --path . sg.tscn -- --capture=/tmp/sg.png` (add `--realtime` for mode 2).
 
+## Light probe scenes
+
+- `probes_volume.tscn`: LightmapGI with `probe_volume_enabled` (spacing 0.5 m), sampled per pixel by dynamic objects.
+- `probes_classic.tscn`: the same with only the classic tetrahedral probes (one value per object).
+
+Both add three large dynamic objects (a column by the red wall, a bar running into the sunlit opening, a big ball).
+Bake them with `godot --editor --path . -- --auto-bake=res://probes_volume.tscn,res://probes_classic.tscn`.
+Press <kbd>3</kbd> (or pass `--baked-only`) to hide the lights, so dynamic objects show only what the probes give them.
+
 `build_scenes.gd` regenerates the scenes: `godot --headless --path . --script build_scenes.gd`.
