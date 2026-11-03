@@ -34,6 +34,7 @@
 #include "editor/editor_string_names.h"
 #include "editor/settings/editor_settings.h"
 #include "scene/3d/lightmap_gi.h"
+#include "scene/3d/lightmap_probe_volume_builder.h"
 
 LightmapGIGizmoPlugin::LightmapGIGizmoPlugin() {
 	// NOTE: This gizmo only renders solid spheres for previewing indirect lighting on dynamic objects.
@@ -43,6 +44,7 @@ LightmapGIGizmoPlugin::LightmapGIGizmoPlugin() {
 
 	gizmo_color.a = 0.1;
 	create_material("lightmap_lines", gizmo_color);
+	create_material("lightmap_probe_volume_lines", Color(1, 1, 1, 0.3));
 
 	Ref<StandardMaterial3D> mat = memnew(StandardMaterial3D);
 	mat->set_shading_mode(StandardMaterial3D::SHADING_MODE_UNSHADED);
@@ -71,6 +73,85 @@ int LightmapGIGizmoPlugin::get_priority() const {
 	return -1;
 }
 
+// Draws the adaptive probe volume: cell outlines colored by density (blue: 1 brick per axis, green: 2, yellow: 4,
+// red: 8) and each probe as a small octahedron colored by its irradiance. Returns false if there is no volume.
+static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<LightmapGIData> &p_data, float p_probe_size, const Ref<Material> &p_lines_material, const Ref<Material> &p_probe_material) {
+	LocalVector<Vector3> positions;
+	LocalVector<Color> sh;
+	LocalVector<float> spacing;
+	LocalVector<LightmapProbeVolumeBuilder::DebugCell> cells;
+	if (!LightmapProbeVolumeBuilder::decode_data(p_data->_get_probe_volume_data(), positions, sh, spacing, cells)) {
+		return false;
+	}
+
+	const Color level_colors[4] = { Color(0.3, 0.5, 1.0), Color(0.3, 1.0, 0.4), Color(1.0, 0.9, 0.2), Color(1.0, 0.3, 0.2) };
+	Vector<Vector3> level_lines[4];
+	for (const LightmapProbeVolumeBuilder::DebugCell &cell : cells) {
+		const int level = CLAMP(int(Math::log2(float(cell.bricks_per_axis))), 0, 3);
+		for (int i = 0; i < 12; i++) {
+			Vector3 a, b;
+			cell.aabb.get_edge(i, a, b);
+			level_lines[level].push_back(a);
+			level_lines[level].push_back(b);
+		}
+	}
+	for (int i = 0; i < 4; i++) {
+		if (!level_lines[i].is_empty()) {
+			p_gizmo->add_lines(level_lines[i], p_lines_material, false, level_colors[i]);
+		}
+	}
+
+	// Drawing millions of probes would stall the editor; the cell outlines still show the layout.
+	constexpr uint32_t MAX_DRAWN_PROBES = 200000;
+	if (positions.size() > MAX_DRAWN_PROBES || Math::is_zero_approx(p_probe_size)) {
+		return true;
+	}
+
+	const Vector3 dirs[6] = { Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(0, 0, -1) };
+	const int faces[8][3] = { { 0, 2, 4 }, { 2, 1, 4 }, { 1, 3, 4 }, { 3, 0, 4 }, { 2, 0, 5 }, { 1, 2, 5 }, { 3, 1, 5 }, { 0, 3, 5 } };
+	// Same L1 convolution as the runtime.
+	const float c0 = 0.886227;
+	const float c1 = 1.023327;
+
+	Vector<Vector3> vertices;
+	Vector<Color> colors;
+	Vector<int> indices;
+	vertices.resize(positions.size() * 6);
+	colors.resize(positions.size() * 6);
+	indices.resize(positions.size() * 24);
+	Vector3 *vw = vertices.ptrw();
+	Color *cw = colors.ptrw();
+	int *iw = indices.ptrw();
+	for (uint32_t p = 0; p < positions.size(); p++) {
+		// Keep probes smaller than the gaps between them, so dense areas stay readable.
+		const float radius = MIN(p_probe_size * 0.5f, spacing[p] * 0.25f);
+		const Color *c = &sh[p * 4];
+		for (int i = 0; i < 6; i++) {
+			const Vector3 &n = dirs[i];
+			Color light = c[0] * c0 + (c[1] * n.y + c[2] * n.z + c[3] * n.x) * c1;
+			cw[p * 6 + i] = Color(MAX(light.r, 0.0f), MAX(light.g, 0.0f), MAX(light.b, 0.0f), 1.0);
+			vw[p * 6 + i] = positions[p] + n * radius;
+		}
+		for (int f = 0; f < 8; f++) {
+			for (int k = 0; k < 3; k++) {
+				iw[p * 24 + f * 3 + k] = p * 6 + faces[f][k];
+			}
+		}
+	}
+
+	Array array;
+	array.resize(RSE::ARRAY_MAX);
+	array[RSE::ARRAY_VERTEX] = vertices;
+	array[RSE::ARRAY_INDEX] = indices;
+	array[RSE::ARRAY_COLOR] = colors;
+	Ref<ArrayMesh> mesh;
+	mesh.instantiate();
+	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, array, Array(), Dictionary(), 0);
+	mesh->surface_set_material(0, p_probe_material);
+	p_gizmo->add_mesh(mesh);
+	return true;
+}
+
 void LightmapGIGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 	Ref<Material> icon = get_material("baked_indirect_light_icon", p_gizmo);
 	LightmapGI *baker = Object::cast_to<LightmapGI>(p_gizmo->get_node_3d());
@@ -86,6 +167,11 @@ void LightmapGIGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 
 	Ref<Material> material_lines = get_material("lightmap_lines", p_gizmo);
 	Ref<Material> material_probes = get_material("lightmap_probe_material", p_gizmo);
+
+	// When there is a probe volume, it replaces the classic probes as the lighting dynamic objects get.
+	if (_draw_lightmap_probe_volume(p_gizmo, data, probe_size, get_material("lightmap_probe_volume_lines", p_gizmo), material_probes)) {
+		return;
+	}
 
 	Vector<Vector3> lines;
 	HashSet<Vector2i> lines_found;

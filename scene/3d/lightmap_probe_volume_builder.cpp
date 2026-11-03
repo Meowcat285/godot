@@ -32,9 +32,10 @@
 
 #include "core/math/face3.h"
 #include "core/math/math_funcs.h"
-#include "core/math/vector3i.h"
-#include "core/variant/variant.h"
 #include "core/math/transform_3d.h"
+#include "core/math/vector3i.h"
+#include "core/templates/hash_set.h"
+#include "core/variant/variant.h"
 
 // Probes that see more backfaces than this are inside geometry.
 static constexpr float BACKFACE_RATIO_INVALID = 0.25;
@@ -289,4 +290,79 @@ Dictionary LightmapProbeVolumeBuilder::build_data(const LocalVector<Color> &p_sh
 	d["grid_xform"] = grid_xform;
 	d["probe_count"] = probe_count;
 	return d;
+}
+
+bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells) {
+	r_positions.clear();
+	r_sh.clear();
+	r_spacing.clear();
+	r_cells.clear();
+	if (!p_data.has("data")) {
+		return false;
+	}
+	const Vector<uint8_t> data = p_data["data"];
+	const Vector3i grid_size = p_data["grid_size"];
+	const Vector3i atlas_bricks = p_data["atlas_bricks"];
+	const Transform3D grid_to_local = Transform3D(p_data["grid_xform"]).affine_inverse();
+	const Vector3i tex_size(MAX(atlas_bricks.x * 4, grid_size.x), MAX(atlas_bricks.y * 4, grid_size.y), atlas_bricks.z * 4 * 3 + grid_size.z);
+	ERR_FAIL_COND_V(data.size() != int64_t(tex_size.x) * tex_size.y * tex_size.z * 4 * sizeof(uint16_t), false);
+
+	const uint16_t *texels = (const uint16_t *)data.ptr();
+	const int slab_depth = atlas_bricks.z * 4;
+	auto texel = [&](int p_x, int p_y, int p_z) -> const uint16_t * {
+		return &texels[((int64_t(p_z) * tex_size.y + p_y) * tex_size.x + p_x) * 4];
+	};
+	const float cell_size = grid_to_local.basis.get_scale().x;
+
+	// Probes shared by bricks and cells are drawn once. Keys are in units of the finest possible spacing.
+	HashSet<Vector3i> seen;
+	for (int z = 0; z < grid_size.z; z++) {
+		for (int y = 0; y < grid_size.y; y++) {
+			for (int x = 0; x < grid_size.x; x++) {
+				const uint16_t *ind = texel(x, y, slab_depth * 3 + z);
+				const uint32_t first_brick = uint32_t(Math::half_to_float(ind[0])) + uint32_t(Math::half_to_float(ind[1])) * 2048;
+				const int n = MAX(1, int(Math::half_to_float(ind[2])));
+
+				DebugCell cell;
+				cell.aabb = grid_to_local.xform(AABB(Vector3(x, y, z), Vector3(1, 1, 1)));
+				cell.bricks_per_axis = n;
+				r_cells.push_back(cell);
+
+				const int key_step = 8 / MIN(n, 8);
+				for (int bz = 0; bz < n; bz++) {
+					for (int by = 0; by < n; by++) {
+						for (int bx = 0; bx < n; bx++) {
+							const uint32_t brick = first_brick + (bz * n + by) * n + bx;
+							const Vector3i atlas_pos = Vector3i(brick % atlas_bricks.x, (brick / atlas_bricks.x) % atlas_bricks.y, brick / (atlas_bricks.x * atlas_bricks.y)) * 4;
+							for (int pz = 0; pz < 4; pz++) {
+								for (int py = 0; py < 4; py++) {
+									for (int px = 0; px < 4; px++) {
+										const Vector3i local = Vector3i(bx, by, bz) * 3 + Vector3i(px, py, pz);
+										const Vector3i key = Vector3i(x, y, z) * 24 + local * key_step;
+										if (seen.has(key)) {
+											continue;
+										}
+										seen.insert(key);
+										r_positions.push_back(grid_to_local.xform(Vector3(x, y, z) + Vector3(local) / float(3 * n)));
+										r_spacing.push_back(cell_size / (3 * n));
+										float values[12];
+										for (int slab = 0; slab < 3; slab++) {
+											const uint16_t *t = texel(atlas_pos.x + px, atlas_pos.y + py, slab * slab_depth + atlas_pos.z + pz);
+											for (int k = 0; k < 4; k++) {
+												values[slab * 4 + k] = Math::half_to_float(t[k]);
+											}
+										}
+										for (int j = 0; j < 4; j++) {
+											r_sh.push_back(Color(values[j * 3 + 0], values[j * 3 + 1], values[j * 3 + 2]));
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return true;
 }
