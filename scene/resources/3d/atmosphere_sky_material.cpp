@@ -185,21 +185,21 @@ void AtmosphereSkyMaterial::_params_changed() {
 
 void AtmosphereSkyMaterial::_update_params() {
 	RS *rs = RS::get_singleton();
-	const RID material = _get_material();
-	rs->material_set_param(material, "ground_radius", ground_radius);
-	rs->material_set_param(material, "atmosphere_height", atmosphere_height);
-	rs->material_set_param(material, "ground_albedo", color_to_vec3(ground_albedo));
-	rs->material_set_param(material, "rayleigh_scattering", color_to_vec3(rayleigh_scattering_color) * rayleigh_scattering_scale);
-	rs->material_set_param(material, "rayleigh_scale_height", rayleigh_scale_height);
-	rs->material_set_param(material, "mie_scattering", color_to_vec3(mie_scattering_color) * mie_scattering_scale);
-	rs->material_set_param(material, "mie_extinction", color_to_vec3(mie_scattering_color) * mie_scattering_scale + color_to_vec3(mie_absorption_color) * mie_absorption_scale);
-	rs->material_set_param(material, "mie_anisotropy", mie_anisotropy);
-	rs->material_set_param(material, "mie_scale_height", mie_scale_height);
-	rs->material_set_param(material, "ozone_absorption", color_to_vec3(ozone_absorption_color) * ozone_absorption_scale);
-	rs->material_set_param(material, "ozone_altitude", ozone_altitude);
-	rs->material_set_param(material, "ozone_width", ozone_width);
-	rs->material_set_param(material, "observer_altitude", observer_altitude * 0.001f);
-	rs->material_set_param(material, "exposure", energy_multiplier);
+	const RID rid = _get_material();
+	rs->material_set_param(rid, "ground_radius", ground_radius);
+	rs->material_set_param(rid, "atmosphere_height", atmosphere_height);
+	rs->material_set_param(rid, "ground_albedo", color_to_vec3(ground_albedo));
+	rs->material_set_param(rid, "rayleigh_scattering", color_to_vec3(rayleigh_scattering_color) * rayleigh_scattering_scale);
+	rs->material_set_param(rid, "rayleigh_scale_height", rayleigh_scale_height);
+	rs->material_set_param(rid, "mie_scattering", color_to_vec3(mie_scattering_color) * mie_scattering_scale);
+	rs->material_set_param(rid, "mie_extinction", color_to_vec3(mie_scattering_color) * mie_scattering_scale + color_to_vec3(mie_absorption_color) * mie_absorption_scale);
+	rs->material_set_param(rid, "mie_anisotropy", mie_anisotropy);
+	rs->material_set_param(rid, "mie_scale_height", mie_scale_height);
+	rs->material_set_param(rid, "ozone_absorption", color_to_vec3(ozone_absorption_color) * ozone_absorption_scale);
+	rs->material_set_param(rid, "ozone_altitude", ozone_altitude);
+	rs->material_set_param(rid, "ozone_width", ozone_width);
+	rs->material_set_param(rid, "observer_altitude", observer_altitude * 0.001f);
+	rs->material_set_param(rid, "exposure", energy_multiplier);
 }
 
 void AtmosphereSkyMaterial::_deferred_update_luts() {
