@@ -2407,6 +2407,26 @@ void main() {
 	diffuse_light *= half(1.0) - metallic;
 	ambient_light *= half(1.0) - metallic;
 
+	if (bool(scene_data.flags & SCENE_DATA_FLAGS_DEBUG_LIGHTMAP_SG_SPECULAR)) {
+		// Debug draw mode: only the Spherical Gaussian lightmap specular, before it is blended with reflections.
+#ifdef MODE_UNSHADED
+		albedo = hvec3(0.0);
+#else
+		emission = hvec3(0.0);
+#if !defined(AMBIENT_LIGHT_DISABLED) && defined(USE_LIGHTMAP)
+		emission = hvec3(lightmap_sg_specular);
+#endif
+		ambient_light = hvec3(0.0);
+		diffuse_light = hvec3(0.0);
+		direct_specular_light = hvec3(0.0);
+		indirect_specular_light = hvec3(0.0);
+		sss_strength = half(0.0);
+#endif
+#ifndef FOG_DISABLED
+		fog = hvec4(0.0, 0.0, 0.0, 0.0);
+#endif
+	}
+
 #ifdef MODE_MULTIPLE_RENDER_TARGETS
 
 #ifdef MODE_UNSHADED
