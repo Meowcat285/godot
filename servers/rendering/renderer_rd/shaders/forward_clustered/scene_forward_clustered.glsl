@@ -1865,10 +1865,18 @@ void fragment_shader(in SceneData scene_data) {
 				// The dominant baked light's highlight, shaded like a real-time light (whose color includes PI).
 				// Its diffuse is already in sg_diffuse.
 				vec3 L_view = normalize(sg_direct_dir * sg_normal_xform);
+				// Same specular inputs as real-time lights get further down.
 				vec3 f0 = F0(metallic, specular, albedo);
+#ifdef LIGHT_CLEARCOAT_USED
+				f0 = mix(f0, f0_Clear_Coat_To_Surface(f0), clearcoat);
+#endif
+				vec3 sg_energy_compensation = vec3(1.0);
+#if !defined(DIFFUSE_TOON)
+				sg_energy_compensation = get_energy_compensation(f0, prefiltered_dfg(roughness, clamp(dot(normal, view), 0.0001, 1.0)).y);
+#endif
 				vec3 diffuse_light_discarded = diffuse_light;
 				vec3 direct_specular_before = vec3(direct_specular_light);
-				light_compute(normal, L_view, view, 0.0, sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization), true, 1.0, f0, roughness, metallic, 1.0, albedo, alpha, screen_uv, energy_compensation,
+				light_compute(normal, L_view, view, 0.0, sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization), true, 1.0, f0, roughness, metallic, 1.0, albedo, alpha, screen_uv, sg_energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

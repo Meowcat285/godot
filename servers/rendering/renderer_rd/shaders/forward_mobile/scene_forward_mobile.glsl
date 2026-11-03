@@ -1760,7 +1760,11 @@ void main() {
 				// The dominant baked light's highlight, shaded like a real-time light (whose color includes PI).
 				// Its diffuse is already in sg_diffuse.
 				vec3 L_view_highp = normalize(sg_direct_dir * sg_normal_xform);
+				// Same specular inputs as real-time lights get further down.
 				hvec3 f0 = F0(metallic, specular, albedo);
+#ifdef LIGHT_CLEARCOAT_USED
+				f0 = mix(f0, f0_Clear_Coat_To_Surface(f0), clearcoat);
+#endif
 				hvec3 diffuse_light_discarded = diffuse_light;
 				vec3 direct_specular_before = vec3(direct_specular_light);
 				light_compute(normal, hvec3(L_view_highp), view, saturateHalf(0.0), hvec3(sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization)), true, half(1.0), f0, roughness, metallic, half(1.0), albedo, alpha,
