@@ -3204,6 +3204,26 @@ void fragment_shader(in SceneData scene_data) {
 	fog = vec4(unpackHalf2x16(fog_rg), unpackHalf2x16(fog_ba));
 #endif //!FOG_DISABLED
 
+	if (bool(scene_data.flags & SCENE_DATA_FLAGS_DEBUG_LIGHTMAP_SG_SPECULAR)) {
+		// Debug draw mode: only the Spherical Gaussian lightmap specular, before it is blended with reflections.
+#ifdef MODE_UNSHADED
+		albedo = vec3(0.0);
+#else
+		emission = vec3(0.0);
+#if !defined(AMBIENT_LIGHT_DISABLED) && defined(USE_LIGHTMAP)
+		emission = lightmap_sg_specular;
+#endif
+		ambient_light = vec3(0.0);
+		diffuse_light = vec3(0.0);
+		direct_specular_light = vec3(0.0);
+		indirect_specular_light = vec3(0.0);
+		sss_strength = 0.0;
+#endif
+#ifndef FOG_DISABLED
+		fog = vec4(0.0, 0.0, 0.0, 1.0);
+#endif
+	}
+
 #ifdef MODE_SEPARATE_SPECULAR
 
 #ifdef MODE_UNSHADED
