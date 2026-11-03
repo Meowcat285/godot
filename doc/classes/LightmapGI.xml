@@ -66,6 +66,18 @@
 			The maximum texture size for the generated texture atlas. Higher values will result in fewer slices being generated, but may not work on all hardware as a result of hardware limitations on texture sizes. Leave [member max_texture_size] at its default value of [code]16384[/code] if unsure.
 			[b]Note:[/b] If [member supersampling] is enabled, the texture atlas used while baking may be up to [member supersampling_factor] times larger than [member max_texture_size], since it's downsampled before saving.
 		</member>
+		<member name="probe_volume_enabled" type="bool" setter="set_probe_volume_enabled" getter="is_probe_volume_enabled" default="false">
+			If [code]true[/code], bakes an adaptive probe volume in addition to the regular light probes. Dynamic objects inside it sample indirect lighting per pixel with trilinear filtering, instead of receiving one value for the whole object, so large or moving objects get smooth lighting gradients across their surface.
+			Probes are placed in bricks on a grid that is densest near geometry and coarser away from it. Probes that end up inside geometry are replaced by their neighbors, which reduces light leaking.
+			The volume uses L1 spherical harmonics. When several [LightmapGI]s have a probe volume, only the one closest to the camera is used; objects outside it fall back to the regular light probes. Requires rebaking.
+			[b]Note:[/b] Only supported in the Forward+ and Mobile rendering methods.
+		</member>
+		<member name="probe_volume_spacing" type="float" setter="set_probe_volume_spacing" getter="get_probe_volume_spacing" default="1.0">
+			The distance between probes near geometry, in meters. Lower values capture finer lighting changes, but increase bake time and memory use quickly. Requires rebaking.
+		</member>
+		<member name="probe_volume_subdivisions" type="int" setter="set_probe_volume_subdivisions" getter="get_probe_volume_subdivisions" default="3">
+			The number of probe density levels. Far from geometry, probes are [code]2^(subdivisions - 1)[/code] times further apart than [member probe_volume_spacing], and density increases one level per grid cell towards geometry. Requires rebaking.
+		</member>
 		<member name="quality" type="int" setter="set_bake_quality" getter="get_bake_quality" enum="LightmapGI.BakeQuality" default="1">
 			The quality preset to use when baking lightmaps. This affects bake times, but output file sizes remain mostly identical across quality levels.
 			To further speed up bake times, decrease [member bounces], disable [member use_denoiser] and/or decrease [member texel_scale].

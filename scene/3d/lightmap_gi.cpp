@@ -41,6 +41,7 @@
 #include "core/object/object.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/lightmap_probe.h"
+#include "scene/3d/lightmap_probe_volume_builder.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/resources/camera_attributes.h"
 #include "scene/resources/environment.h"
@@ -236,6 +237,19 @@ bool LightmapGIData::_is_using_spherical_gaussians() const {
 	return _uses_spherical_gaussians;
 }
 
+void LightmapGIData::_set_probe_volume_data(const Dictionary &p_data) {
+	probe_volume_data = p_data;
+	if (p_data.has("data")) {
+		RS::get_singleton()->lightmap_set_probe_volume(lightmap, p_data["data"], p_data["grid_size"], p_data["atlas_bricks"], p_data["grid_xform"]);
+	} else {
+		RS::get_singleton()->lightmap_set_probe_volume(lightmap, Vector<uint8_t>(), Vector3i(), Vector3i(), Transform3D());
+	}
+}
+
+Dictionary LightmapGIData::_get_probe_volume_data() const {
+	return probe_volume_data;
+}
+
 void LightmapGIData::update_shadowmask_mode(ShadowmaskMode p_mode) {
 	RS::get_singleton()->lightmap_set_shadowmask_mode(lightmap, (RSE::ShadowmaskMode)p_mode);
 }
@@ -368,6 +382,8 @@ void LightmapGIData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_set_uses_packed_directional", "_uses_packed_directional"), &LightmapGIData::_set_uses_packed_directional);
 	ClassDB::bind_method(D_METHOD("_set_uses_spherical_gaussians", "_uses_spherical_gaussians"), &LightmapGIData::_set_uses_spherical_gaussians);
 	ClassDB::bind_method(D_METHOD("_is_using_spherical_gaussians"), &LightmapGIData::_is_using_spherical_gaussians);
+	ClassDB::bind_method(D_METHOD("_set_probe_volume_data", "data"), &LightmapGIData::_set_probe_volume_data);
+	ClassDB::bind_method(D_METHOD("_get_probe_volume_data"), &LightmapGIData::_get_probe_volume_data);
 	ClassDB::bind_method(D_METHOD("_is_using_packed_directional"), &LightmapGIData::_is_using_packed_directional);
 
 	ClassDB::bind_method(D_METHOD("add_user", "path", "uv_scale", "slice_index", "sub_instance"), &LightmapGIData::add_user);
@@ -385,6 +401,7 @@ void LightmapGIData::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "probe_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_probe_data", "_get_probe_data");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_packed_directional", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_packed_directional", "_is_using_packed_directional");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_spherical_gaussians", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_spherical_gaussians", "_is_using_spherical_gaussians");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "_probe_volume_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_probe_volume_data", "_get_probe_volume_data");
 
 #ifndef DISABLE_DEPRECATED
 	ClassDB::bind_method(D_METHOD("set_light_texture", "light_texture"), &LightmapGIData::set_light_texture);
@@ -1438,6 +1455,22 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 	}
 
+	// Adaptive probe volume probes go after the regular probes, which keep feeding the per-object capture.
+	LightmapProbeVolumeBuilder probe_volume;
+	uint32_t probe_volume_count = 0;
+	if (probe_volume_enabled && probe_volume.begin(bounds, probe_volume_spacing, probe_volume_subdivisions)) {
+		for (const Lightmapper::MeshData &md : mesh_data) {
+			for (int j = 0; j + 2 < md.points.size(); j += 3) {
+				probe_volume.plot_triangle(md.points[j + 0], md.points[j + 1], md.points[j + 2]);
+			}
+		}
+		probe_volume.finish_layout();
+		probe_volume_count = probe_volume.get_probe_positions().size();
+		for (const Vector3 &position : probe_volume.get_probe_positions()) {
+			lightmapper->add_probe(position);
+		}
+	}
+
 	Ref<Image> environment_image;
 	Basis environment_transform;
 
@@ -1566,7 +1599,22 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		gi_data->add_user(np, uv_scale, slice_index, subindex);
 	}
 
-	int probe_count = lightmapper->get_bake_probe_count();
+	int probe_count = lightmapper->get_bake_probe_count() - probe_volume_count;
+
+	if (probe_volume_count > 0) {
+		LocalVector<Color> volume_sh;
+		volume_sh.resize(probe_volume_count * 9);
+		for (uint32_t i = 0; i < probe_volume_count; i++) {
+			Vector<Color> colors = lightmapper->get_bake_probe_sh(probe_count + i);
+			ERR_BREAK(colors.size() != 9);
+			for (int j = 0; j < 9; j++) {
+				volume_sh[i * 9 + j] = colors[j];
+			}
+		}
+		gi_data->_set_probe_volume_data(probe_volume.build_data(volume_sh));
+	} else {
+		gi_data->_set_probe_volume_data(Dictionary());
+	}
 
 	// Probe SH may change between bakes.
 	LocalVector<Color> probe_sh;
@@ -2040,6 +2088,30 @@ bool LightmapGI::is_using_spherical_gaussians() const {
 	return use_spherical_gaussians;
 }
 
+void LightmapGI::set_probe_volume_enabled(bool p_enable) {
+	probe_volume_enabled = p_enable;
+}
+
+bool LightmapGI::is_probe_volume_enabled() const {
+	return probe_volume_enabled;
+}
+
+void LightmapGI::set_probe_volume_spacing(float p_spacing) {
+	probe_volume_spacing = MAX(p_spacing, 0.05f);
+}
+
+float LightmapGI::get_probe_volume_spacing() const {
+	return probe_volume_spacing;
+}
+
+void LightmapGI::set_probe_volume_subdivisions(int p_subdivisions) {
+	probe_volume_subdivisions = CLAMP(p_subdivisions, 1, 4);
+}
+
+int LightmapGI::get_probe_volume_subdivisions() const {
+	return probe_volume_subdivisions;
+}
+
 void LightmapGI::set_specular_intensity(float p_strength) {
 	specular_intensity = p_strength;
 
@@ -2184,6 +2256,13 @@ void LightmapGI::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_use_spherical_gaussians", "use_spherical_gaussians"), &LightmapGI::set_use_spherical_gaussians);
 	ClassDB::bind_method(D_METHOD("is_using_spherical_gaussians"), &LightmapGI::is_using_spherical_gaussians);
 
+	ClassDB::bind_method(D_METHOD("set_probe_volume_enabled", "enabled"), &LightmapGI::set_probe_volume_enabled);
+	ClassDB::bind_method(D_METHOD("is_probe_volume_enabled"), &LightmapGI::is_probe_volume_enabled);
+	ClassDB::bind_method(D_METHOD("set_probe_volume_spacing", "spacing"), &LightmapGI::set_probe_volume_spacing);
+	ClassDB::bind_method(D_METHOD("get_probe_volume_spacing"), &LightmapGI::get_probe_volume_spacing);
+	ClassDB::bind_method(D_METHOD("set_probe_volume_subdivisions", "subdivisions"), &LightmapGI::set_probe_volume_subdivisions);
+	ClassDB::bind_method(D_METHOD("get_probe_volume_subdivisions"), &LightmapGI::get_probe_volume_subdivisions);
+
 	//	ClassDB::bind_method(D_METHOD("bake", "from_node"), &LightmapGI::bake, DEFVAL(Variant()));
 
 	ADD_GROUP("Tweaks", "");
@@ -2213,6 +2292,10 @@ void LightmapGI::_bind_methods() {
 
 	ADD_GROUP("Gen Probes", "generate_probes_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "generate_probes_subdiv", PROPERTY_HINT_ENUM, "Disabled,4,8,16,32"), "set_generate_probes", "get_generate_probes");
+	ADD_GROUP("Probe Volume", "probe_volume_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "probe_volume_enabled"), "set_probe_volume_enabled", "is_probe_volume_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "probe_volume_spacing", PROPERTY_HINT_RANGE, "0.05,16,0.01,or_greater,suffix:m"), "set_probe_volume_spacing", "get_probe_volume_spacing");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "probe_volume_subdivisions", PROPERTY_HINT_RANGE, "1,4,1"), "set_probe_volume_subdivisions", "get_probe_volume_subdivisions");
 	ADD_GROUP("Data", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "light_data", PROPERTY_HINT_RESOURCE_TYPE, LightmapGIData::get_class_static()), "set_light_data", "get_light_data");
 
