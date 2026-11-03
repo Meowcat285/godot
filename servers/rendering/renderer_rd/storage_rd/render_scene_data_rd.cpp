@@ -155,6 +155,7 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 	ubo.opaque_prepass_threshold = opaque_prepass_threshold;
 	ubo.flags |= material_uv2_mode ? SCENE_DATA_FLAGS_USE_UV2_MATERIAL : 0;
 	ubo.flags |= shadow_pass ? SCENE_DATA_FLAGS_IN_SHADOW_PASS : 0;
+	ubo.flags |= p_debug_mode == RSE::VIEWPORT_DEBUG_DRAW_LIGHTMAP_SG_SPECULAR ? SCENE_DATA_FLAGS_DEBUG_LIGHTMAP_SG_SPECULAR : 0;
 
 	if (p_debug_mode == RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 		ubo.flags |= SCENE_DATA_FLAGS_USE_AMBIENT_LIGHT;
