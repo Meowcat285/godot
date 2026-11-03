@@ -228,7 +228,7 @@ void AtmosphereSkyMaterial::_update_luts() const {
 
 	const float rg = atmosphere.ground_radius;
 	const float rt = atmosphere.top_radius;
-	const float horizon = Math::sqrt((rt - rg) * (rt + rg));
+	const float horizon = MAX(Math::sqrt((rt - rg) * (rt + rg)), 1e-6f);
 
 	// Transmittance from a point to the top of the atmosphere, parameterized as in Bruneton 2017.
 	constexpr int TW = TRANSMITTANCE_LUT_WIDTH;
@@ -264,8 +264,11 @@ void AtmosphereSkyMaterial::_update_luts() const {
 		const float d = MAX(0.0f, AtmosphereModel::ray_sphere(p_r, p_mu, rt));
 		const float d_min = rt - p_r;
 		const float d_max = rho + horizon;
-		const float x_mu = CLAMP((d - d_min) / MAX(d_max - d_min, 1e-6f), 0.0f, 1.0f) * (TW - 1);
-		const float x_r = CLAMP(rho / horizon, 0.0f, 1.0f) * (TH - 1);
+		// Written so NaN from extreme settings maps to 0 instead of an invalid index.
+		const float u_mu = (d - d_min) / MAX(d_max - d_min, 1e-6f);
+		const float u_r = rho / horizon;
+		const float x_mu = (u_mu > 0.0f ? MIN(u_mu, 1.0f) : 0.0f) * (TW - 1);
+		const float x_r = (u_r > 0.0f ? MIN(u_r, 1.0f) : 0.0f) * (TH - 1);
 		const int x0 = MIN(int(x_mu), TW - 2);
 		const int y0 = MIN(int(x_r), TH - 2);
 		const float fx = x_mu - x0;
