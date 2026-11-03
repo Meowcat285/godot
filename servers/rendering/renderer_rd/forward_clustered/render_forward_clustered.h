@@ -426,6 +426,8 @@ private:
 		LightmapCaptureData *lightmap_captures = nullptr;
 		uint32_t max_lightmap_captures;
 		RID lightmap_capture_buffer;
+		RID lightmap_probe_volume_buffer;
+		RID lightmap_probe_volume_texture;
 
 		RID voxelgi_ids[MAX_VOXEL_GI_INSTANCESS];
 		uint32_t voxelgis_used = 0;

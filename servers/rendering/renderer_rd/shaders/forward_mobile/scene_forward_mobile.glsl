@@ -924,6 +924,7 @@ layout(location = 13) in highp vec4 prev_screen_position;
 #ifdef USE_LIGHTMAP
 #include "../bicubic_filter_inc.glsl"
 #include "../lightmap_sg_inc.glsl"
+#include "../lightmap_probe_volume_inc.glsl"
 #endif //USE_LIGHTMAP
 
 #ifdef USE_MULTIVIEW
@@ -1711,28 +1712,33 @@ void main() {
 	if (bool(instances.data[draw_call.instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[draw_call.instance_index].gi_offset;
 
-		// The world normal.
-		hvec3 wnormal = hmat3(inv_view_matrix) * indirect_normal;
+		vec3 probe_volume_irradiance;
+		if (lightmap_probe_volume_sample(vertex, vec3(indirect_normal), probe_volume_irradiance)) {
+			ambient_light += hvec3(probe_volume_irradiance * scene_data.IBL_exposure_normalization);
+		} else {
+			// The world normal.
+			hvec3 wnormal = hmat3(inv_view_matrix) * indirect_normal;
 
-		// The SH coefficients used for evaluating diffuse data from SH probes.
-		const half c[5] = half[](
-				half(0.886227), // l0 				sqrt(1.0/(4.0*PI)) 	* PI
-				half(1.023327), // l1 				sqrt(3.0/(4.0*PI)) 	* PI*2.0/3.0
-				half(0.858086), // l2n2, l2n1, l2p1	sqrt(15.0/(4.0*PI)) * PI*1.0/4.0
-				half(0.247708), // l20 				sqrt(5.0/(16.0*PI)) * PI*1.0/4.0
-				half(0.429043) // l2p2 			sqrt(15.0/(16.0*PI))* PI*1.0/4.0
-		);
+			// The SH coefficients used for evaluating diffuse data from SH probes.
+			const half c[5] = half[](
+					half(0.886227), // l0 				sqrt(1.0/(4.0*PI)) 	* PI
+					half(1.023327), // l1 				sqrt(3.0/(4.0*PI)) 	* PI*2.0/3.0
+					half(0.858086), // l2n2, l2n1, l2p1	sqrt(15.0/(4.0*PI)) * PI*1.0/4.0
+					half(0.247708), // l20 				sqrt(5.0/(16.0*PI)) * PI*1.0/4.0
+					half(0.429043) // l2p2 			sqrt(15.0/(16.0*PI))* PI*1.0/4.0
+			);
 
-		half norm = half(scene_data.IBL_exposure_normalization);
-		ambient_light += c[0] * hvec3(lightmap_captures.data[index].sh[0].rgb) * norm;
-		ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[1].rgb) * wnormal.y * norm;
-		ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[2].rgb) * wnormal.z * norm;
-		ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[3].rgb) * wnormal.x * norm;
-		ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[4].rgb) * wnormal.x * wnormal.y * norm;
-		ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[5].rgb) * wnormal.y * wnormal.z * norm;
-		ambient_light += c[3] * hvec3(lightmap_captures.data[index].sh[6].rgb) * (half(3.0) * wnormal.z * wnormal.z - half(1.0)) * norm;
-		ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[7].rgb) * wnormal.x * wnormal.z * norm;
-		ambient_light += c[4] * hvec3(lightmap_captures.data[index].sh[8].rgb) * (wnormal.x * wnormal.x - wnormal.y * wnormal.y) * norm;
+			half norm = half(scene_data.IBL_exposure_normalization);
+			ambient_light += c[0] * hvec3(lightmap_captures.data[index].sh[0].rgb) * norm;
+			ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[1].rgb) * wnormal.y * norm;
+			ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[2].rgb) * wnormal.z * norm;
+			ambient_light += c[1] * hvec3(lightmap_captures.data[index].sh[3].rgb) * wnormal.x * norm;
+			ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[4].rgb) * wnormal.x * wnormal.y * norm;
+			ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[5].rgb) * wnormal.y * wnormal.z * norm;
+			ambient_light += c[3] * hvec3(lightmap_captures.data[index].sh[6].rgb) * (half(3.0) * wnormal.z * wnormal.z - half(1.0)) * norm;
+			ambient_light += c[2] * hvec3(lightmap_captures.data[index].sh[7].rgb) * wnormal.x * wnormal.z * norm;
+			ambient_light += c[4] * hvec3(lightmap_captures.data[index].sh[8].rgb) * (wnormal.x * wnormal.x - wnormal.y * wnormal.y) * norm;
+		}
 
 	} else if (bool(instances.data[draw_call.instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) { // has actual lightmap
 		bool uses_sh = bool(instances.data[draw_call.instance_index].flags & INSTANCE_FLAGS_USE_SH_LIGHTMAP);

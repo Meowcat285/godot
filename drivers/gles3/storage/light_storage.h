@@ -743,6 +743,7 @@ public:
 	virtual void lightmap_set_probe_bounds(RID p_lightmap, const AABB &p_bounds) override;
 	virtual void lightmap_set_probe_interior(RID p_lightmap, bool p_interior) override;
 	virtual void lightmap_set_probe_capture_data(RID p_lightmap, const PackedVector3Array &p_points, const PackedColorArray &p_point_sh, const PackedInt32Array &p_tetrahedra, const PackedInt32Array &p_bsp_tree) override;
+	virtual void lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_t> &p_data, const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks, const Transform3D &p_grid_xform) override {} // Not supported in Compatibility.
 	virtual void lightmap_set_baked_exposure_normalization(RID p_lightmap, float p_exposure) override;
 	virtual PackedVector3Array lightmap_get_probe_capture_points(RID p_lightmap) const override;
 	virtual PackedColorArray lightmap_get_probe_capture_sh(RID p_lightmap) const override;

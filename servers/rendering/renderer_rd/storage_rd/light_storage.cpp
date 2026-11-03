@@ -2093,6 +2093,7 @@ void LightStorage::lightmap_initialize(RID p_lightmap) {
 
 void LightStorage::lightmap_free(RID p_rid) {
 	lightmap_set_textures(p_rid, RID(), false);
+	lightmap_set_probe_volume(p_rid, Vector<uint8_t>(), Vector3i(), Vector3i(), Transform3D());
 	Lightmap *lightmap = lightmap_owner.get_or_null(p_rid);
 	lightmap->dependency.deleted_notify(p_rid);
 	lightmap_owner.free(p_rid);
@@ -2175,6 +2176,86 @@ void LightStorage::lightmap_set_probe_capture_data(RID p_lightmap, const PackedV
 	lm->bsp_tree = p_bsp_tree;
 	lm->point_sh = p_point_sh;
 	lm->tetrahedra = p_tetrahedra;
+}
+
+// The probe volume is one RGBA16F 3D texture holding a brick atlas and an indirection grid, stacked along Z:
+// - Three slabs of 4 * atlas_bricks.z texels each, holding L1 SH as (L0.rgb, L1y.r), (L1y.gb, L1z.rg), (L1z.b, L1x.rgb).
+//   Bricks are 4x4x4 probes, placed in the atlas in index order (x first). Adjacent bricks repeat their shared probes,
+//   so hardware trilinear filtering inside a brick is seamless.
+// - Then grid_size.z slices of the indirection grid, one texel per cell: (first brick index % 2048, first brick index / 2048,
+//   bricks per axis in this cell, unused). All values are whole numbers, which RGBA16F stores exactly.
+// p_grid_xform maps lightmap-local space to grid space, where each cell is one unit.
+void LightStorage::lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_t> &p_data, const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks, const Transform3D &p_grid_xform) {
+	Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+	ERR_FAIL_NULL(lm);
+
+	if (lm->probe_volume_texture.is_valid()) {
+		RD::get_singleton()->free_rid(lm->probe_volume_texture);
+		lm->probe_volume_texture = RID();
+	}
+	lm->probe_volume_grid_size = Vector3i();
+	lm->probe_volume_atlas_bricks = Vector3i();
+
+	if (p_data.is_empty()) {
+		return;
+	}
+
+	RD::TextureFormat tf;
+	tf.texture_type = RD::TEXTURE_TYPE_3D;
+	tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+	tf.width = MAX(p_atlas_bricks.x * 4, p_grid_size.x);
+	tf.height = MAX(p_atlas_bricks.y * 4, p_grid_size.y);
+	tf.depth = p_atlas_bricks.z * 4 * 3 + p_grid_size.z;
+	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
+	ERR_FAIL_COND_MSG(uint64_t(p_data.size()) != uint64_t(tf.width) * tf.height * tf.depth * 8, "Lightmap probe volume data doesn't match its size.");
+
+	Vector<Vector<uint8_t>> data;
+	data.push_back(p_data);
+	lm->probe_volume_texture = RD::get_singleton()->texture_create(tf, RD::TextureView(), data);
+	ERR_FAIL_COND(lm->probe_volume_texture.is_null());
+	RD::get_singleton()->set_resource_name(lm->probe_volume_texture, "Lightmap Probe Volume");
+
+	lm->probe_volume_grid_size = p_grid_size;
+	lm->probe_volume_atlas_bricks = p_atlas_bricks;
+	lm->probe_volume_grid_xform = p_grid_xform;
+}
+
+RID LightStorage::lightmap_probe_volume_fill_data(const PagedArray<RID> &p_lightmap_instances, const Transform3D &p_cam_transform, LightmapProbeVolumeData &r_data) {
+	memset(&r_data, 0, sizeof(LightmapProbeVolumeData));
+
+	const Lightmap *best = nullptr;
+	Transform3D best_xform;
+	real_t best_distance = 0.0;
+	for (uint32_t i = 0; i < p_lightmap_instances.size(); i++) {
+		const LightmapInstance *li = lightmap_instance_owner.get_or_null(p_lightmap_instances[i]);
+		ERR_CONTINUE(!li);
+		const Lightmap *lm = lightmap_owner.get_or_null(li->lightmap);
+		if (!lm || lm->probe_volume_texture.is_null()) {
+			continue;
+		}
+		// Distance from the camera to the volume, in grid units (0 inside it).
+		const Vector3 cam_grid = (lm->probe_volume_grid_xform * li->transform.affine_inverse()).xform(p_cam_transform.origin);
+		const Vector3 grid_size = lm->probe_volume_grid_size;
+		const real_t distance = (cam_grid - cam_grid.clamp(Vector3(), grid_size)).length() / lm->probe_volume_grid_xform.basis.get_scale().x;
+		if (!best || distance < best_distance) {
+			best = lm;
+			best_xform = li->transform;
+			best_distance = distance;
+		}
+	}
+
+	if (!best) {
+		return RID();
+	}
+
+	const Transform3D view_to_grid = best->probe_volume_grid_xform * best_xform.affine_inverse() * p_cam_transform;
+	MaterialStorage::store_transform_transposed_3x4(view_to_grid, r_data.view_to_grid);
+	for (int i = 0; i < 3; i++) {
+		r_data.grid_size[i] = best->probe_volume_grid_size[i];
+		r_data.atlas_bricks[i] = best->probe_volume_atlas_bricks[i];
+	}
+	r_data.grid_size[3] = 1;
+	return best->probe_volume_texture;
 }
 
 void LightStorage::lightmap_set_baked_exposure_normalization(RID p_lightmap, float p_exposure) {
