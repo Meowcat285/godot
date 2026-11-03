@@ -305,7 +305,7 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 	const Vector3i atlas_bricks = p_data["atlas_bricks"];
 	const Transform3D grid_to_local = Transform3D(p_data["grid_xform"]).affine_inverse();
 	const Vector3i tex_size(MAX(atlas_bricks.x * 4, grid_size.x), MAX(atlas_bricks.y * 4, grid_size.y), atlas_bricks.z * 4 * 3 + grid_size.z);
-	ERR_FAIL_COND_V(data.size() != int64_t(tex_size.x) * tex_size.y * tex_size.z * 4 * sizeof(uint16_t), false);
+	ERR_FAIL_COND_V(int64_t(data.size()) != int64_t(tex_size.x) * tex_size.y * tex_size.z * 4 * int64_t(sizeof(uint16_t)), false);
 
 	const uint16_t *texels = (const uint16_t *)data.ptr();
 	const int slab_depth = atlas_bricks.z * 4;
