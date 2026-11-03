@@ -218,6 +218,14 @@ Light3D::BakeMode Light3D::get_bake_mode() const {
 	return bake_mode;
 }
 
+void Light3D::set_bake_sharp_specular(bool p_enable) {
+	bake_sharp_specular = p_enable;
+}
+
+bool Light3D::is_bake_sharp_specular_enabled() const {
+	return bake_sharp_specular;
+}
+
 void Light3D::set_projector(const Ref<Texture2D> &p_texture) {
 	projector = p_texture;
 	RID tex_id = projector.is_valid() ? projector->get_rid() : RID();
@@ -401,6 +409,8 @@ void Light3D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_bake_mode", "bake_mode"), &Light3D::set_bake_mode);
 	ClassDB::bind_method(D_METHOD("get_bake_mode"), &Light3D::get_bake_mode);
+	ClassDB::bind_method(D_METHOD("set_bake_sharp_specular", "enable"), &Light3D::set_bake_sharp_specular);
+	ClassDB::bind_method(D_METHOD("is_bake_sharp_specular_enabled"), &Light3D::is_bake_sharp_specular_enabled);
 
 	ClassDB::bind_method(D_METHOD("set_projector", "projector"), &Light3D::set_projector);
 	ClassDB::bind_method(D_METHOD("get_projector"), &Light3D::get_projector);
@@ -424,6 +434,7 @@ void Light3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "light_negative"), "set_negative", "is_negative");
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "light_specular", PROPERTY_HINT_RANGE, "0,16,0.001,or_greater"), "set_param", "get_param", PARAM_SPECULAR);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "light_bake_mode", PROPERTY_HINT_ENUM, "Disabled,Static,Dynamic"), "set_bake_mode", "get_bake_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "light_bake_sharp_specular"), "set_bake_sharp_specular", "is_bake_sharp_specular_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "light_cull_mask", PROPERTY_HINT_LAYERS_3D_RENDER), "set_cull_mask", "get_cull_mask");
 
 	ADD_GROUP("Shadow", "shadow_");
@@ -482,6 +493,7 @@ void Light3D::_bind_methods() {
 
 Light3D::Light3D(RSE::LightType p_type) {
 	type = p_type;
+	bake_sharp_specular = p_type == RSE::LIGHT_DIRECTIONAL;
 	switch (p_type) {
 		case RSE::LIGHT_DIRECTIONAL:
 			light = RenderingServer::get_singleton()->directional_light_create();

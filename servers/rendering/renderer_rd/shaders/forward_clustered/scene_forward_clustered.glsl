@@ -1811,6 +1811,7 @@ void fragment_shader(in SceneData scene_data) {
 
 	//lightmap
 	vec3 lightmap_sg_specular = vec3(0.0);
+	vec3 lightmap_sg_direct_specular = vec3(0.0); // For the SG specular debug view.
 	float lightmap_sg_blend = 0.0;
 	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[instance_index].gi_offset;
@@ -1848,15 +1849,57 @@ void fragment_shader(in SceneData scene_data) {
 
 		if (uses_sh && lightmaps.data[ofs].normal_xform_and_specular_intensity[1][3] > 0.5) {
 			// Spherical Gaussian lightmap.
-			uvw.z *= float(LIGHTMAP_SG_LOBE_COUNT);
+			uvw.z *= float(LIGHTMAP_SG_LAYER_COUNT);
 			mat3 sg_normal_xform = mat3(lightmaps.data[ofs].normal_xform_and_specular_intensity);
 			vec3 sg_normal = normalize(sg_normal_xform * indirect_normal);
 			vec3 sg_reflection = normalize(sg_normal_xform * reflect(-view, normal));
 			vec3 sg_diffuse;
-			lightmap_sg_compute(lightmap_textures[ofs], uvw, lightmaps.data[ofs].light_texture_size, sc_use_lightmap_bicubic_filter(), sg_normal, sg_reflection, roughness, max(dot(normal, view), 0.0), sg_diffuse, lightmap_sg_specular);
+			vec3 sg_direct_color;
+			vec3 sg_direct_dir;
+			lightmap_sg_compute(lightmap_textures[ofs], uvw, lightmaps.data[ofs].light_texture_size, sc_use_lightmap_bicubic_filter(), sg_normal, sg_reflection, roughness, max(dot(normal, view), 0.0), sg_diffuse, lightmap_sg_specular, sg_direct_color, sg_direct_dir);
 			ambient_light += sg_diffuse * lightmaps.data[ofs].exposure_normalization;
 			lightmap_sg_specular *= lightmaps.data[ofs].exposure_normalization;
 			lightmap_sg_blend = lightmap_sg_specular_blend(roughness, max(dot(normal, view), 0.0));
+
+			if (sc_use_lightmap_specular() && any(greaterThan(sg_direct_color, vec3(0.0)))) {
+				// The dominant baked light's highlight, shaded like a real-time light (whose color includes PI).
+				// Its diffuse is already in sg_diffuse.
+				vec3 L_view = normalize(sg_direct_dir * sg_normal_xform);
+				// Same specular inputs as real-time lights get further down.
+				vec3 f0 = F0(metallic, specular, albedo);
+#ifdef LIGHT_CLEARCOAT_USED
+				f0 = mix(f0, f0_Clear_Coat_To_Surface(f0), clearcoat);
+#endif
+				vec3 sg_energy_compensation = vec3(1.0);
+#if !defined(DIFFUSE_TOON)
+				sg_energy_compensation = get_energy_compensation(f0, prefiltered_dfg(roughness, clamp(dot(normal, view), 0.0001, 1.0)).y);
+#endif
+				vec3 diffuse_light_discarded = diffuse_light;
+				vec3 direct_specular_before = vec3(direct_specular_light);
+				light_compute(normal, L_view, view, 0.0, sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization), true, 1.0, f0, roughness, metallic, 1.0, albedo, alpha, screen_uv, sg_energy_compensation,
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+						transmittance_color,
+						transmittance_depth,
+						transmittance_boost,
+						0.0,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim, rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, geo_normal,
+#endif // LIGHT_CLEARCOAT_USED
+#ifdef LIGHT_ANISOTROPY_USED
+						binormal,
+						tangent, anisotropy,
+#endif
+						diffuse_light_discarded,
+						direct_specular_light);
+				lightmap_sg_direct_specular = vec3(direct_specular_light) - direct_specular_before;
+			}
 		} else if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
 			vec3 lm_light_l0;
@@ -3179,7 +3222,7 @@ void fragment_shader(in SceneData scene_data) {
 #else
 		emission = vec3(0.0);
 #if !defined(AMBIENT_LIGHT_DISABLED) && defined(USE_LIGHTMAP)
-		emission = lightmap_sg_specular;
+		emission = lightmap_sg_specular + lightmap_sg_direct_specular; // Includes the dominant baked light, which is shaded as a light.
 #endif
 		ambient_light = vec3(0.0);
 		diffuse_light = vec3(0.0);

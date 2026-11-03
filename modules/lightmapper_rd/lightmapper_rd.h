@@ -81,7 +81,7 @@ class LightmapperRD : public Lightmapper {
 		float indirect_energy = 0.0;
 		float shadow_blur = 0.0;
 		uint32_t static_bake = 0;
-		uint32_t pad = 0;
+		uint32_t sharp_specular = 0;
 		float area_width[4] = {};
 		float area_height[4] = {};
 		float area_texture_rect[4] = {};
@@ -306,12 +306,14 @@ class LightmapperRD : public Lightmapper {
 	Ref<Image> _read_pfm(const String &p_name, bool p_shadowmask);
 	BakeError _denoise_oidn(RenderingDevice *p_rd, RID p_source_light_tex, RID p_source_normal_tex, RID p_dest_light_tex, const Size2i &p_atlas_size, int p_atlas_slices, bool p_bake_sh, bool p_shadowmask, const String &p_exe);
 
-	// Must match SG_LOBE_COUNT in lm_sg_inc.glsl.
-	static constexpr int SG_LOBE_COUNT = 12;
+	// Must match SG_LAYER_COUNT and SG_DIRECT_DIR_LAYER in lm_sg_inc.glsl: the 12 lobes, then the dominant direct light's color and direction.
+	static constexpr int SG_LAYER_COUNT = 14;
+	static constexpr int SG_DIRECT_DIR_LAYER = 13;
 	bool use_spherical_gaussians = false;
+	bool next_light_sharp_specular = false;
 
 	// Number of texture layers that make up one atlas slice of the light texture.
-	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LOBE_COUNT : 4) : 1; }
+	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LAYER_COUNT : 4) : 1; }
 
 public:
 	virtual void add_mesh(const MeshData &p_mesh) override;
@@ -322,6 +324,7 @@ public:
 	virtual void add_area_light_atlas(const Vector2i &p_size, int p_mipmap_count, const PackedByteArray &p_atlas_data) override;
 	virtual void add_probe(const Vector3 &p_position) override;
 	virtual void set_use_spherical_gaussians(bool p_enable) override { use_spherical_gaussians = p_enable; }
+	virtual void set_next_light_sharp_specular(bool p_enable) override { next_light_sharp_specular = p_enable; }
 	virtual BakeError bake(BakeQuality p_quality, bool p_use_denoiser, float p_denoiser_strength, int p_denoiser_range, int p_bounces, float p_bounce_indirect_energy, float p_bias, int p_max_texture_size, bool p_bake_sh, bool p_bake_shadowmask, bool p_texture_for_bounces, GenerateProbes p_generate_probes, const Ref<Image> &p_environment_panorama, const Basis &p_environment_transform, BakeStepFunc p_step_function = nullptr, void *p_bake_userdata = nullptr, float p_exposure_normalization = 1.0, float p_supersampling_factor = 1.0f) override;
 
 	int get_bake_texture_count() const override;

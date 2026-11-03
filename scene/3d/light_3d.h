@@ -84,6 +84,7 @@ private:
 	bool editor_only = false;
 	void _update_visibility();
 	BakeMode bake_mode = BAKE_DYNAMIC;
+	bool bake_sharp_specular = false;
 	Ref<Texture2D> projector;
 	Color correlated_color = Color(1.0, 1.0, 1.0);
 	float temperature = 6500.0;
@@ -145,6 +146,9 @@ public:
 
 	void set_bake_mode(BakeMode p_mode);
 	BakeMode get_bake_mode() const;
+
+	void set_bake_sharp_specular(bool p_enable);
+	bool is_bake_sharp_specular_enabled() const;
 
 	void set_projector(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_projector() const;

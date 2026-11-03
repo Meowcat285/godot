@@ -104,6 +104,8 @@ vec3 sg_denoise_guide(ivec2 p_pos, uint p_slice_base) {
 	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
 		sum += texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(p_pos, p_slice_base + j), 0).rgb;
 	}
+	// The dominant direct light is stored separately; its lobe projections would sum to about 1.5 times its irradiance.
+	sum += 1.5 * texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(p_pos, p_slice_base + SG_DIRECT_COLOR_LAYER), 0).rgb;
 	return sum * (1.0 / 3.0);
 }
 #endif
@@ -921,6 +923,10 @@ void main() {
 	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
 		sg_accum[j] = vec3(0.0);
 	}
+	// The strongest static directional light is kept out of the lobes, which can't represent a sharp light.
+	vec3 sg_direct_light = vec3(0.0);
+	vec3 sg_direct_dir = vec3(0.0);
+	float sg_direct_luminance = 0.0;
 #endif
 
 	// Use atlas position and a prime number as the seed.
@@ -973,8 +979,22 @@ void main() {
 			float sg_attenuation = dot(normal, light_dir);
 			if (sg_attenuation > 0.0001) {
 				vec3 sg_light = light / sg_attenuation * bake_params.exposure_normalization;
+				vec3 sg_dir = light_dir;
+				float sg_luminance = dot(light, vec3(0.2126, 0.7152, 0.0722));
+				// Only lights with Light3D.light_bake_sharp_specular (directional lights by default) are kept out of the
+				// lobes, so the artist picks which lights get a sharp highlight.
+				if (lights.data[i].sharp_specular && sg_luminance > sg_direct_luminance) {
+					// New strongest directional light: the previous one goes into the lobes instead.
+					vec3 swap_light = sg_direct_light;
+					vec3 swap_dir = sg_direct_dir;
+					sg_direct_light = sg_light;
+					sg_direct_dir = sg_dir;
+					sg_direct_luminance = sg_luminance;
+					sg_light = swap_light;
+					sg_dir = swap_dir;
+				}
 				for (uint j = 0; j < SG_LOBE_COUNT; j++) {
-					sg_accum[j] += sg_light * sg_lobe_weight(j, light_dir);
+					sg_accum[j] += sg_light * sg_lobe_weight(j, sg_dir);
 				}
 			}
 #endif
@@ -1000,8 +1020,10 @@ void main() {
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * 4 + 3), sh_accum[3]);
 #elif defined(USE_SG_LIGHTMAPS)
 	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
-		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), vec4(sg_accum[j], 1.0));
+		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LAYER_COUNT + j), vec4(sg_accum[j], 1.0));
 	}
+	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LAYER_COUNT + SG_DIRECT_COLOR_LAYER), vec4(sg_direct_light, 1.0));
+	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LAYER_COUNT + SG_DIRECT_DIR_LAYER), vec4(sg_direct_dir * 0.5 + 0.5, 1.0));
 #else
 	light_for_texture *= bake_params.exposure_normalization;
 	imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice), vec4(light_for_texture, 1.0));
@@ -1087,9 +1109,9 @@ void main() {
 	}
 #elif defined(USE_SG_LIGHTMAPS)
 	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
-		vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j));
+		vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LAYER_COUNT + j));
 		accum.rgb += sg_accum[j] / float(params.ray_count);
-		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LOBE_COUNT + j), accum);
+		imageStore(accum_light, ivec3(atlas_pos, params.atlas_slice * SG_LAYER_COUNT + j), accum);
 	}
 #else
 	vec4 accum = imageLoad(accum_light, ivec3(atlas_pos, params.atlas_slice));
@@ -1308,24 +1330,25 @@ void main() {
 
 #ifdef USE_SG_LIGHTMAPS
 	// The shadowmask is denoised with the same shader, so check the layer count too.
-	if (slice_count == SG_LOBE_COUNT) {
+	if (slice_count == SG_LAYER_COUNT) {
 		// All lobes share the same filter weights so they stay consistent with each other. Denoising each lobe
 		// on its own blurs the small lobes across light edges more than the large ones, which leaves dark rings.
-		vec4 input_lobes[SG_LOBE_COUNT];
-		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		// The dominant direct light's color and direction layers use the same weights.
+		vec4 input_lobes[SG_LAYER_COUNT];
+		for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 			input_lobes[j] = texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(atlas_pos, slice_base + j), 0);
 		}
 		vec3 input_albedo = texelFetch(sampler2DArray(albedo_tex, linear_sampler), ivec3(atlas_pos, params.atlas_slice), 0).rgb;
 		vec3 input_normal = texelFetch(sampler2DArray(source_normal, linear_sampler), ivec3(atlas_pos, params.atlas_slice), 0).xyz;
-		vec3 denoised_lobes[SG_LOBE_COUNT];
-		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		vec3 denoised_lobes[SG_LAYER_COUNT];
+		for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 			denoised_lobes[j] = input_lobes[j].rgb;
 		}
 
 		if (length(input_normal) > EPSILON) {
 			float sum_weights = 0.0f;
-			vec3 accum_lobes[SG_LOBE_COUNT];
-			for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+			vec3 accum_lobes[SG_LAYER_COUNT];
+			for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 				accum_lobes[j] = vec3(0.0f);
 			}
 
@@ -1360,7 +1383,7 @@ void main() {
 					weight *= 1.0 - search_occlusion;
 
 					if (weight > 0.0f) {
-						for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+						for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 							accum_lobes[j] += weight * texelFetch(sampler2DArray(source_light, linear_sampler), ivec3(search_pos, slice_base + j), 0).rgb;
 						}
 						sum_weights += weight;
@@ -1369,13 +1392,13 @@ void main() {
 			}
 
 			if (sum_weights > EPSILON) {
-				for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+				for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 					denoised_lobes[j] = accum_lobes[j] / sum_weights;
 				}
 			}
 		}
 
-		for (uint j = 0; j < SG_LOBE_COUNT; j++) {
+		for (uint j = 0; j < SG_LAYER_COUNT; j++) {
 			imageStore(dest_light, ivec3(atlas_pos, slice_base + j), vec4(denoised_lobes[j], input_lobes[j].a));
 		}
 		return;

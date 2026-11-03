@@ -176,6 +176,7 @@ public:
 	virtual void add_area_light_atlas(const Vector2i &p_size, int p_mipmap_count, const PackedByteArray &p_atlas_data) = 0;
 	virtual void add_probe(const Vector3 &p_position) = 0;
 	virtual void set_use_spherical_gaussians(bool p_enable) {}
+	virtual void set_next_light_sharp_specular(bool p_enable) {} // Applies to the lights added after it.
 	virtual BakeError bake(BakeQuality p_quality, bool p_use_denoiser, float p_denoiser_strength, int p_denoiser_range, int p_bounces, float p_bounce_indirect_energy, float p_bias, int p_max_texture_size, bool p_bake_sh, bool p_bake_shadowmask, bool p_texture_for_bounces, GenerateProbes p_generate_probes, const Ref<Image> &p_environment_panorama, const Basis &p_environment_transform, BakeStepFunc p_step_function = nullptr, void *p_step_userdata = nullptr, float p_exposure_normalization = 1.0, float p_supersampling_factor = 1.0) = 0;
 
 	virtual int get_bake_texture_count() const = 0;
