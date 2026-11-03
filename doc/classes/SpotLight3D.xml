@@ -15,6 +15,7 @@
 		<link title="Third Person Shooter (TPS) Demo">https://godotengine.org/asset-library/asset/2710</link>
 	</tutorials>
 	<members>
+		<member name="light_bake_sharp_specular" type="bool" setter="set_bake_sharp_specular" getter="is_bake_sharp_specular_enabled" overrides="Light3D" default="false" />
 		<member name="light_specular" type="float" setter="set_param" getter="get_param" overrides="Light3D" default="0.5" />
 		<member name="shadow_bias" type="float" setter="set_param" getter="get_param" overrides="Light3D" default="0.03" />
 		<member name="shadow_normal_bias" type="float" setter="set_param" getter="get_param" overrides="Light3D" default="1.0" />

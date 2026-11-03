@@ -80,6 +80,7 @@ void LightmapperRD::add_directional_light(const String &p_name, bool p_static, c
 	l.energy = p_energy;
 	l.indirect_energy = p_indirect_energy;
 	l.static_bake = p_static;
+	l.sharp_specular = next_light_sharp_specular;
 	l.size = Math::tan(Math::deg_to_rad(p_angular_distance));
 	l.shadow_blur = p_shadow_blur;
 	lights.push_back(l);
@@ -104,6 +105,7 @@ void LightmapperRD::add_omni_light(const String &p_name, bool p_static, const Ve
 	l.energy = p_energy;
 	l.indirect_energy = p_indirect_energy;
 	l.static_bake = p_static;
+	l.sharp_specular = next_light_sharp_specular;
 	l.size = p_size;
 	l.shadow_blur = p_shadow_blur;
 	lights.push_back(l);
@@ -133,6 +135,7 @@ void LightmapperRD::add_spot_light(const String &p_name, bool p_static, const Ve
 	l.energy = p_energy;
 	l.indirect_energy = p_indirect_energy;
 	l.static_bake = p_static;
+	l.sharp_specular = next_light_sharp_specular;
 	l.size = p_size;
 	l.shadow_blur = p_shadow_blur;
 	lights.push_back(l);
@@ -166,6 +169,7 @@ void LightmapperRD::add_area_light(const String &p_name, bool p_static, const Ve
 	l.energy = p_energy;
 	l.indirect_energy = p_indirect_energy;
 	l.static_bake = p_static;
+	l.sharp_specular = next_light_sharp_specular;
 	l.size = p_size;
 	l.shadow_blur = p_shadow_blur;
 

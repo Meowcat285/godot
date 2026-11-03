@@ -87,7 +87,7 @@ struct Light {
 	float indirect_energy;
 	float shadow_blur;
 	bool static_bake;
-	uint pad;
+	bool sharp_specular;
 
 	vec4 area_width;
 	vec4 area_height;

@@ -81,7 +81,7 @@ class LightmapperRD : public Lightmapper {
 		float indirect_energy = 0.0;
 		float shadow_blur = 0.0;
 		uint32_t static_bake = 0;
-		uint32_t pad = 0;
+		uint32_t sharp_specular = 0;
 		float area_width[4] = {};
 		float area_height[4] = {};
 		float area_texture_rect[4] = {};
@@ -310,6 +310,7 @@ class LightmapperRD : public Lightmapper {
 	static constexpr int SG_LAYER_COUNT = 14;
 	static constexpr int SG_DIRECT_DIR_LAYER = 13;
 	bool use_spherical_gaussians = false;
+	bool next_light_sharp_specular = false;
 
 	// Number of texture layers that make up one atlas slice of the light texture.
 	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LAYER_COUNT : 4) : 1; }
@@ -323,6 +324,7 @@ public:
 	virtual void add_area_light_atlas(const Vector2i &p_size, int p_mipmap_count, const PackedByteArray &p_atlas_data) override;
 	virtual void add_probe(const Vector3 &p_position) override;
 	virtual void set_use_spherical_gaussians(bool p_enable) override { use_spherical_gaussians = p_enable; }
+	virtual void set_next_light_sharp_specular(bool p_enable) override { next_light_sharp_specular = p_enable; }
 	virtual BakeError bake(BakeQuality p_quality, bool p_use_denoiser, float p_denoiser_strength, int p_denoiser_range, int p_bounces, float p_bounce_indirect_energy, float p_bias, int p_max_texture_size, bool p_bake_sh, bool p_bake_shadowmask, bool p_texture_for_bounces, GenerateProbes p_generate_probes, const Ref<Image> &p_environment_panorama, const Basis &p_environment_transform, BakeStepFunc p_step_function = nullptr, void *p_bake_userdata = nullptr, float p_exposure_normalization = 1.0, float p_supersampling_factor = 1.0f) override;
 
 	int get_bake_texture_count() const override;

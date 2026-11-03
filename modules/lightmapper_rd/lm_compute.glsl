@@ -923,7 +923,7 @@ void main() {
 	for (uint j = 0; j < SG_LOBE_COUNT; j++) {
 		sg_accum[j] = vec3(0.0);
 	}
-	// The strongest static light is kept out of the lobes, which can't represent a sharp light.
+	// The strongest static directional light is kept out of the lobes, which can't represent a sharp light.
 	vec3 sg_direct_light = vec3(0.0);
 	vec3 sg_direct_dir = vec3(0.0);
 	float sg_direct_luminance = 0.0;
@@ -981,8 +981,10 @@ void main() {
 				vec3 sg_light = light / sg_attenuation * bake_params.exposure_normalization;
 				vec3 sg_dir = light_dir;
 				float sg_luminance = dot(light, vec3(0.2126, 0.7152, 0.0722));
-				if (sg_luminance > sg_direct_luminance) {
-					// New strongest light: the previous one goes into the lobes instead.
+				// Only lights with Light3D.light_bake_sharp_specular (directional lights by default) are kept out of the
+				// lobes, so the artist picks which lights get a sharp highlight.
+				if (lights.data[i].sharp_specular && sg_luminance > sg_direct_luminance) {
+					// New strongest directional light: the previous one goes into the lobes instead.
 					vec3 swap_light = sg_direct_light;
 					vec3 swap_dir = sg_direct_dir;
 					sg_direct_light = sg_light;

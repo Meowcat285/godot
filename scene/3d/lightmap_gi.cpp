@@ -1397,6 +1397,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 				energy *= 1.0 / Math::PI;
 			}
 
+			lightmapper->set_next_light_sharp_specular(light->is_bake_sharp_specular_enabled());
 			if (Object::cast_to<DirectionalLight3D>(light)) {
 				DirectionalLight3D *l = Object::cast_to<DirectionalLight3D>(light);
 				if (l->get_sky_mode() != DirectionalLight3D::SKY_MODE_SKY_ONLY) {
