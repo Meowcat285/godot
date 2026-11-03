@@ -292,7 +292,7 @@ Dictionary LightmapProbeVolumeBuilder::build_data(const LocalVector<Color> &p_sh
 	return d;
 }
 
-bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells) {
+bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, bool p_include_probes) {
 	r_positions.clear();
 	r_sh.clear();
 	r_spacing.clear();
@@ -321,12 +321,18 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 			for (int x = 0; x < grid_size.x; x++) {
 				const uint16_t *ind = texel(x, y, slab_depth * 3 + z);
 				const uint32_t first_brick = uint32_t(Math::half_to_float(ind[0])) + uint32_t(Math::half_to_float(ind[1])) * 2048;
-				const int n = MAX(1, int(Math::half_to_float(ind[2])));
+				const int n = int(Math::half_to_float(ind[2]));
+				// Reject data that would read outside the atlas.
+				ERR_FAIL_COND_V(n != 1 && n != 2 && n != 4 && n != 8, false);
+				ERR_FAIL_COND_V(int64_t(first_brick) + n * n * n > int64_t(atlas_bricks.x) * atlas_bricks.y * atlas_bricks.z, false);
 
 				DebugCell cell;
 				cell.aabb = grid_to_local.xform(AABB(Vector3(x, y, z), Vector3(1, 1, 1)));
 				cell.bricks_per_axis = n;
 				r_cells.push_back(cell);
+				if (!p_include_probes) {
+					continue;
+				}
 
 				const int key_step = 8 / MIN(n, 8);
 				for (int bz = 0; bz < n; bz++) {

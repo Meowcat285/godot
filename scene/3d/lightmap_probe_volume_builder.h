@@ -78,10 +78,10 @@ public:
 
 	// Unpacks data made by build_data(), for debug drawing. Positions are in the space of the bounds; each probe
 	// gets 4 SH colors (L0, L1y, L1z, L1x) and the probe spacing around it. Each cell gives its bounds and its
-	// bricks per axis.
+	// bricks per axis. With p_include_probes false, only the cells are decoded.
 	struct DebugCell {
 		AABB aabb;
 		int bricks_per_axis = 1;
 	};
-	static bool decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells);
+	static bool decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, bool p_include_probes = true);
 };

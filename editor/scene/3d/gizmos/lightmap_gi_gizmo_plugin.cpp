@@ -80,7 +80,11 @@ static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<Li
 	LocalVector<Color> sh;
 	LocalVector<float> spacing;
 	LocalVector<LightmapProbeVolumeBuilder::DebugCell> cells;
-	if (!LightmapProbeVolumeBuilder::decode_data(p_data->_get_probe_volume_data(), positions, sh, spacing, cells)) {
+	// Drawing millions of probes would stall the editor; the cell outlines still show the layout.
+	constexpr int MAX_DRAWN_PROBES = 50000;
+	const Dictionary volume = p_data->_get_probe_volume_data();
+	const bool draw_probes = int(volume.get("probe_count", 0)) <= MAX_DRAWN_PROBES && !Math::is_zero_approx(p_probe_size);
+	if (!LightmapProbeVolumeBuilder::decode_data(volume, positions, sh, spacing, cells, draw_probes)) {
 		return false;
 	}
 
@@ -101,9 +105,7 @@ static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<Li
 		}
 	}
 
-	// Drawing millions of probes would stall the editor; the cell outlines still show the layout.
-	constexpr uint32_t MAX_DRAWN_PROBES = 50000;
-	if (positions.size() > MAX_DRAWN_PROBES || Math::is_zero_approx(p_probe_size)) {
+	if (!draw_probes) {
 		return true;
 	}
 
