@@ -74,7 +74,7 @@ int LightmapGIGizmoPlugin::get_priority() const {
 }
 
 // Draws the adaptive probe volume: cell outlines colored by density (blue: 1 brick per axis, green: 2, yellow: 4,
-// red: 8) and each probe as a small octahedron colored by its irradiance. Returns false if there is no volume.
+// red: 8) and each probe as a small sphere shaded by its irradiance. Returns false if there is no volume.
 static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<LightmapGIData> &p_data, float p_probe_size, const Ref<Material> &p_lines_material, const Ref<Material> &p_probe_material) {
 	LocalVector<Vector3> positions;
 	LocalVector<Color> sh;
@@ -102,40 +102,66 @@ static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<Li
 	}
 
 	// Drawing millions of probes would stall the editor; the cell outlines still show the layout.
-	constexpr uint32_t MAX_DRAWN_PROBES = 200000;
+	constexpr uint32_t MAX_DRAWN_PROBES = 50000;
 	if (positions.size() > MAX_DRAWN_PROBES || Math::is_zero_approx(p_probe_size)) {
 		return true;
 	}
 
-	const Vector3 dirs[6] = { Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(0, 0, -1) };
-	const int faces[8][3] = { { 0, 2, 4 }, { 2, 1, 4 }, { 1, 3, 4 }, { 3, 0, 4 }, { 2, 0, 5 }, { 1, 2, 5 }, { 3, 1, 5 }, { 0, 3, 5 } };
+	// A low-poly UV sphere per probe, shaded with the probe's L1 irradiance in each vertex direction.
+	constexpr int STACKS = 6;
+	constexpr int SECTORS = 8;
+	LocalVector<Vector3> unit_vertices;
+	for (int i = 0; i <= STACKS; i++) {
+		const float stack_angle = Math::PI / 2 - i * Math::PI / STACKS;
+		for (int j = 0; j <= SECTORS; j++) {
+			const float sector_angle = j * Math::PI * 2.0 / SECTORS;
+			unit_vertices.push_back(Vector3(Math::cos(stack_angle) * Math::cos(sector_angle), Math::sin(stack_angle), Math::cos(stack_angle) * Math::sin(sector_angle)));
+		}
+	}
+	LocalVector<int> unit_indices;
+	for (int i = 0; i < STACKS; i++) {
+		for (int j = 0; j < SECTORS; j++) {
+			const int k1 = i * (SECTORS + 1) + j;
+			const int k2 = k1 + SECTORS + 1;
+			if (i != 0) {
+				unit_indices.push_back(k1);
+				unit_indices.push_back(k2);
+				unit_indices.push_back(k1 + 1);
+			}
+			if (i != STACKS - 1) {
+				unit_indices.push_back(k1 + 1);
+				unit_indices.push_back(k2);
+				unit_indices.push_back(k2 + 1);
+			}
+		}
+	}
 	// Same L1 convolution as the runtime.
 	const float c0 = 0.886227;
 	const float c1 = 1.023327;
 
+	const int vertex_count = unit_vertices.size();
+	const int index_count = unit_indices.size();
 	Vector<Vector3> vertices;
 	Vector<Color> colors;
 	Vector<int> indices;
-	vertices.resize(positions.size() * 6);
-	colors.resize(positions.size() * 6);
-	indices.resize(positions.size() * 24);
+	vertices.resize(positions.size() * vertex_count);
+	colors.resize(positions.size() * vertex_count);
+	indices.resize(positions.size() * index_count);
 	Vector3 *vw = vertices.ptrw();
 	Color *cw = colors.ptrw();
 	int *iw = indices.ptrw();
 	for (uint32_t p = 0; p < positions.size(); p++) {
-		// Keep probes smaller than the gaps between them, so dense areas stay readable.
-		const float radius = MIN(p_probe_size * 0.5f, spacing[p] * 0.25f);
+		// Keep probes well apart from each other, so dense areas stay readable.
+		const float radius = MIN(p_probe_size * 0.25f, spacing[p] * 0.12f);
 		const Color *c = &sh[p * 4];
-		for (int i = 0; i < 6; i++) {
-			const Vector3 &n = dirs[i];
-			Color light = c[0] * c0 + (c[1] * n.y + c[2] * n.z + c[3] * n.x) * c1;
-			cw[p * 6 + i] = Color(MAX(light.r, 0.0f), MAX(light.g, 0.0f), MAX(light.b, 0.0f), 1.0);
-			vw[p * 6 + i] = positions[p] + n * radius;
+		for (int i = 0; i < vertex_count; i++) {
+			const Vector3 &n = unit_vertices[i];
+			const Color light = c[0] * c0 + (c[1] * n.y + c[2] * n.z + c[3] * n.x) * c1;
+			cw[p * vertex_count + i] = Color(MAX(light.r, 0.0f), MAX(light.g, 0.0f), MAX(light.b, 0.0f), 1.0);
+			vw[p * vertex_count + i] = positions[p] + n * radius;
 		}
-		for (int f = 0; f < 8; f++) {
-			for (int k = 0; k < 3; k++) {
-				iw[p * 24 + f * 3 + k] = p * 6 + faces[f][k];
-			}
+		for (int i = 0; i < index_count; i++) {
+			iw[p * index_count + i] = p * vertex_count + unit_indices[i];
 		}
 	}
 
