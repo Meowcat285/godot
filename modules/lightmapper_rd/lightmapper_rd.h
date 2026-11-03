@@ -306,12 +306,13 @@ class LightmapperRD : public Lightmapper {
 	Ref<Image> _read_pfm(const String &p_name, bool p_shadowmask);
 	BakeError _denoise_oidn(RenderingDevice *p_rd, RID p_source_light_tex, RID p_source_normal_tex, RID p_dest_light_tex, const Size2i &p_atlas_size, int p_atlas_slices, bool p_bake_sh, bool p_shadowmask, const String &p_exe);
 
-	// Must match SG_LOBE_COUNT in lm_sg_inc.glsl.
-	static constexpr int SG_LOBE_COUNT = 12;
+	// Must match SG_LAYER_COUNT and SG_DIRECT_DIR_LAYER in lm_sg_inc.glsl: the 12 lobes, then the dominant direct light's color and direction.
+	static constexpr int SG_LAYER_COUNT = 14;
+	static constexpr int SG_DIRECT_DIR_LAYER = 13;
 	bool use_spherical_gaussians = false;
 
 	// Number of texture layers that make up one atlas slice of the light texture.
-	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LOBE_COUNT : 4) : 1; }
+	int _get_slice_layer_count(bool p_bake_sh) const { return p_bake_sh ? (use_spherical_gaussians ? SG_LAYER_COUNT : 4) : 1; }
 
 public:
 	virtual void add_mesh(const MeshData &p_mesh) override;

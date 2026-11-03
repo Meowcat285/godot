@@ -1743,15 +1743,41 @@ void main() {
 
 		if (uses_sh && lightmaps.data[ofs].normal_xform_and_specular_intensity[1][3] > 0.5) {
 			// Spherical Gaussian lightmap.
-			uvw.z *= float(LIGHTMAP_SG_LOBE_COUNT);
+			uvw.z *= float(LIGHTMAP_SG_LAYER_COUNT);
 			mat3 sg_normal_xform = mat3(lightmaps.data[ofs].normal_xform_and_specular_intensity);
 			vec3 sg_normal = normalize(sg_normal_xform * vec3(indirect_normal));
 			vec3 sg_reflection = normalize(sg_normal_xform * reflect(-vec3(view), vec3(normal)));
 			vec3 sg_diffuse;
-			lightmap_sg_compute(lightmap_textures[ofs], uvw, lightmaps.data[ofs].light_texture_size, sc_use_lightmap_bicubic_filter(), sg_normal, sg_reflection, float(roughness), max(dot(vec3(normal), vec3(view)), 0.0), sg_diffuse, lightmap_sg_specular);
+			vec3 sg_direct_color;
+			vec3 sg_direct_dir;
+			lightmap_sg_compute(lightmap_textures[ofs], uvw, lightmaps.data[ofs].light_texture_size, sc_use_lightmap_bicubic_filter(), sg_normal, sg_reflection, float(roughness), max(dot(vec3(normal), vec3(view)), 0.0), sg_diffuse, lightmap_sg_specular, sg_direct_color, sg_direct_dir);
 			ambient_light += hvec3(sg_diffuse * lightmaps.data[ofs].exposure_normalization);
 			lightmap_sg_specular *= lightmaps.data[ofs].exposure_normalization;
 			lightmap_sg_blend = lightmap_sg_specular_blend(float(roughness), max(dot(vec3(normal), vec3(view)), 0.0));
+
+			if (sc_use_lightmap_specular() && any(greaterThan(sg_direct_color, vec3(0.0)))) {
+				// The dominant baked light's highlight, shaded like a real-time light (whose color includes PI).
+				// Its diffuse is already in sg_diffuse.
+				vec3 L_view_highp = normalize(sg_direct_dir * sg_normal_xform);
+				hvec3 f0 = F0(metallic, specular, albedo);
+				hvec3 diffuse_light_discarded = diffuse_light;
+				light_compute(normal, hvec3(L_view_highp), view, saturateHalf(0.0), hvec3(sg_direct_color * (M_PI * lightmaps.data[ofs].exposure_normalization)), true, half(1.0), f0, roughness, metallic, half(1.0), albedo, alpha,
+						screen_uv, hvec3(1.0),
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim, rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, geo_normal,
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+						binormal, tangent, anisotropy,
+#endif
+						diffuse_light_discarded,
+						direct_specular_light);
+			}
 		} else if (uses_sh) {
 			uvw.z *= 4.0; //SH textures use 4 times more data
 			hvec3 lm_light_l0;

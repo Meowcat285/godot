@@ -959,6 +959,9 @@ LightmapperRD::BakeError LightmapperRD::_denoise_oidn(RenderingDevice *p_rd, RID
 		_store_pfm(p_rd, p_source_normal_tex, i, p_atlas_size, fname_norm_in, false);
 
 		for (int j = 0; j < _get_slice_layer_count(p_bake_sh); j++) {
+			if (p_bake_sh && use_spherical_gaussians && j == SG_DIRECT_DIR_LAYER) {
+				continue; // A direction, not light: OIDN would distort it.
+			}
 			int index = i * _get_slice_layer_count(p_bake_sh) + j;
 			String fname_light_in = EditorPaths::get_singleton()->get_cache_dir().path_join(vformat("temp_light_%d.pfm", index));
 			String fname_out = EditorPaths::get_singleton()->get_cache_dir().path_join(vformat("temp_denoised_%d.pfm", index));
@@ -1060,7 +1063,7 @@ LightmapperRD::BakeError LightmapperRD::_denoise(RenderingDevice *p_rd, Ref<RDSh
 
 	// We denoise in fixed size regions and synchronize execution to avoid GPU timeouts.
 	// We use a region with 1/4 the amount of pixels if we're denoising SH lightmaps, as
-	// all four of them are denoised in the shader in one dispatch (1/16 for the twelve SG lobes).
+	// all four of them are denoised in the shader in one dispatch (1/16 for the fourteen SG layers).
 	const int user_region_size = Math::nearest_power_of_2_templated(int(GLOBAL_GET("rendering/lightmapping/bake_performance/region_size")));
 	const int max_region_size = p_bake_sh ? user_region_size / (use_spherical_gaussians ? 4 : 2) : user_region_size;
 	int x_regions = Math::division_round_up(p_atlas_size.width, max_region_size);

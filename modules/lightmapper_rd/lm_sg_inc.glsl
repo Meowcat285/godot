@@ -22,3 +22,10 @@ const vec3 sg_lobe_axes[SG_LOBE_COUNT] = vec3[](
 float sg_lobe_weight(uint p_lobe, vec3 p_dir) {
 	return exp(SG_SHARPNESS * (dot(sg_lobe_axes[p_lobe], p_dir) - 1.0));
 }
+
+// After the lobes, each slice stores the strongest static direct light at the texel on its own, so it can be
+// shaded as an exact light with a sharp highlight: its irradiance perpendicular to the light, and its direction
+// (encoded as dir * 0.5 + 0.5). Keep in sync with lightmap_sg_inc.glsl and LightmapperRD::SG_LAYER_COUNT.
+#define SG_DIRECT_COLOR_LAYER 12
+#define SG_DIRECT_DIR_LAYER 13
+#define SG_LAYER_COUNT 14
