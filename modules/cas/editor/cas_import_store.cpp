@@ -235,10 +235,6 @@ void CASImportStore::_load_sources() {
 			// run from the editor couldn't read it until then.
 			FileAccess::open(log_path, FileAccess::WRITE);
 		}
-		source_log = FileAccess::open(log_path, FileAccess::READ_WRITE);
-		if (source_log.is_valid()) {
-			source_log->seek_end();
-		}
 	}
 }
 
@@ -254,14 +250,9 @@ void CASImportStore::_compact_source_log() {
 		f->store_line(vformat("%s\t%d\t%d\t%s\t%s", E.key, E.value.modified_time, E.value.size, E.value.source_hash.to_string(), E.value.key.to_string()));
 	}
 	f.unref();
-	source_log.unref();
 	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
 	da->rename(tmp_path, log_path);
 	source_log_entries = sources.size();
-	source_log = FileAccess::open(log_path, FileAccess::READ_WRITE);
-	if (source_log.is_valid()) {
-		source_log->seek_end();
-	}
 }
 
 void CASImportStore::_record_source(const String &p_path, const Source &p_source) {
@@ -270,10 +261,16 @@ void CASImportStore::_record_source(const String &p_path, const Source &p_source
 		sources[p_path] = p_source;
 		base_to_source[ResourceFormatImporter::get_singleton()->get_import_base_path(p_path)] = p_path;
 	}
+	if (read_only) {
+		return;
+	}
 	MutexLock l(log_mutex);
-	if (source_log.is_valid()) {
-		source_log->store_line(vformat("%s\t%d\t%d\t%s\t%s", p_path, p_source.modified_time, p_source.size, p_source.source_hash.to_string(), p_source.key.to_string()));
-		source_log->flush();
+	// Only kept open while writing: with safe saves, Windows locks open files, so projects run from the editor
+	// couldn't read it.
+	Ref<FileAccess> f = FileAccess::open(root.path_join("sources.log"), FileAccess::READ_WRITE);
+	if (f.is_valid()) {
+		f->seek_end();
+		f->store_line(vformat("%s\t%d\t%d\t%s\t%s", p_path, p_source.modified_time, p_source.size, p_source.source_hash.to_string(), p_source.key.to_string()));
 		source_log_entries++;
 	}
 }

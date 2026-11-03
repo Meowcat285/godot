@@ -87,7 +87,6 @@ private:
 	HashMap<CASHash, Manifest> manifests; // Loaded manifests.
 
 	Mutex log_mutex;
-	Ref<FileAccess> source_log;
 	uint32_t source_log_entries = 0;
 
 	Mutex backends_mutex;
