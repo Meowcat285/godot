@@ -926,7 +926,7 @@ void FileSystemDock::_file_list_thumbnail_done(const String &p_path, const Ref<T
 void FileSystemDock::_queue_tree_thumbnail(const String &p_path, TreeItem *p_item) {
 	if (EditorFileSystem::get_singleton()->is_deferred_import(p_path)) {
 		// Generating the thumbnail imports the file, so wait until it's on screen.
-		deferred_tree_thumbnails.push_back({ p_path, p_item->get_instance_id() });
+		deferred_tree_thumbnails[p_item->get_instance_id()] = p_path;
 		return;
 	}
 	EditorResourcePreview::get_singleton()->queue_resource_preview(p_path, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, p_item->get_instance_id()));
@@ -935,45 +935,40 @@ void FileSystemDock::_queue_tree_thumbnail(const String &p_path, TreeItem *p_ite
 void FileSystemDock::_queue_file_list_thumbnail(const String &p_path, int p_index) {
 	if (EditorFileSystem::get_singleton()->is_deferred_import(p_path)) {
 		// Generating the thumbnail imports the file, so wait until it's on screen.
-		deferred_file_thumbnails.push_back({ p_path, ObjectID(), p_index });
+		deferred_file_thumbnails[p_index] = p_path;
 		return;
 	}
 	EditorResourcePreview::get_singleton()->queue_resource_preview(p_path, callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(p_index, files->get_item_text(p_index)));
 }
 
 void FileSystemDock::_queue_visible_deferred_thumbnails() {
-	if (tree->is_visible_in_tree()) {
-		const Rect2 visible_rect(Point2(), tree->get_size());
-		for (uint32_t i = 0; i < deferred_tree_thumbnails.size();) {
-			const DeferredThumbnail &thumbnail = deferred_tree_thumbnails[i];
-			TreeItem *item = ObjectDB::get_instance<TreeItem>(thumbnail.tree_item);
-			bool visible = item && item->is_visible_in_tree() && tree->get_item_rect(item).intersects(visible_rect);
-			for (TreeItem *parent = item ? item->get_parent() : nullptr; visible && parent; parent = parent->get_parent()) {
-				visible = !parent->is_collapsed();
+	if (!deferred_tree_thumbnails.is_empty() && tree->is_visible_in_tree()) {
+		// Find the first item on screen, then go through the items below it until the bottom of the tree.
+		const Size2 size = tree->get_size();
+		TreeItem *item = nullptr;
+		for (real_t y = 0; !item && y < MIN(size.height, 64 * EDSCALE); y += 4 * EDSCALE) {
+			item = tree->get_item_at_position(Point2(size.width * 0.5, y));
+		}
+		for (; item && tree->get_item_rect(item).position.y < size.height; item = item->get_next_visible()) {
+			HashMap<ObjectID, String>::Iterator E = deferred_tree_thumbnails.find(item->get_instance_id());
+			if (E) {
+				EditorResourcePreview::get_singleton()->queue_resource_preview(E->value, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, E->key));
+				deferred_tree_thumbnails.remove(E);
 			}
-			if (item && !visible) {
-				i++;
-				continue;
-			}
-			if (item) {
-				EditorResourcePreview::get_singleton()->queue_resource_preview(thumbnail.path, callable_mp(this, &FileSystemDock::_tree_thumbnail_done).bind(tree_update_id, thumbnail.tree_item));
-			}
-			deferred_tree_thumbnails.remove_at_unordered(i);
 		}
 	}
 
-	if (files->is_visible_in_tree()) {
+	if (!deferred_file_thumbnails.is_empty() && files->is_visible_in_tree()) {
 		const Rect2 visible_rect(Point2(0, files->get_v_scroll_bar()->get_value()), files->get_size());
-		for (uint32_t i = 0; i < deferred_file_thumbnails.size();) {
-			const DeferredThumbnail &thumbnail = deferred_file_thumbnails[i];
-			if (thumbnail.file_index < files->get_item_count() && !files->get_item_rect(thumbnail.file_index).intersects(visible_rect)) {
-				i++;
-				continue;
+		LocalVector<int> visible;
+		for (const KeyValue<int, String> &E : deferred_file_thumbnails) {
+			if (E.key < files->get_item_count() && files->get_item_rect(E.key).intersects(visible_rect)) {
+				visible.push_back(E.key);
 			}
-			if (thumbnail.file_index < files->get_item_count()) {
-				EditorResourcePreview::get_singleton()->queue_resource_preview(thumbnail.path, callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(thumbnail.file_index, files->get_item_text(thumbnail.file_index)));
-			}
-			deferred_file_thumbnails.remove_at_unordered(i);
+		}
+		for (int index : visible) {
+			EditorResourcePreview::get_singleton()->queue_resource_preview(deferred_file_thumbnails[index], callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(index, files->get_item_text(index)));
+			deferred_file_thumbnails.erase(index);
 		}
 	}
 }

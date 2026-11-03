@@ -389,13 +389,8 @@ private:
 	void _tree_thumbnail_done(const String &p_path, const Ref<Texture2D> &p_preview, const Ref<Texture2D> &p_small_preview, int p_update_id, ObjectID p_item);
 
 	// Thumbnails of files whose import is deferred, requested once they're on screen.
-	struct DeferredThumbnail {
-		String path;
-		ObjectID tree_item;
-		int file_index = -1;
-	};
-	LocalVector<DeferredThumbnail> deferred_tree_thumbnails;
-	LocalVector<DeferredThumbnail> deferred_file_thumbnails;
+	HashMap<ObjectID, String> deferred_tree_thumbnails;
+	HashMap<int, String> deferred_file_thumbnails;
 	void _queue_tree_thumbnail(const String &p_path, TreeItem *p_item);
 	void _queue_file_list_thumbnail(const String &p_path, int p_index);
 	void _queue_visible_deferred_thumbnails();
