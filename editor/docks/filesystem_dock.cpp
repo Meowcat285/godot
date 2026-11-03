@@ -960,13 +960,13 @@ void FileSystemDock::_queue_visible_deferred_thumbnails() {
 
 	if (!deferred_file_thumbnails.is_empty() && files->is_visible_in_tree()) {
 		const Rect2 visible_rect(Point2(0, files->get_v_scroll_bar()->get_value()), files->get_size());
-		LocalVector<int> visible;
+		LocalVector<int> visible_indices;
 		for (const KeyValue<int, String> &E : deferred_file_thumbnails) {
 			if (E.key < files->get_item_count() && files->get_item_rect(E.key).intersects(visible_rect)) {
-				visible.push_back(E.key);
+				visible_indices.push_back(E.key);
 			}
 		}
-		for (int index : visible) {
+		for (int index : visible_indices) {
 			EditorResourcePreview::get_singleton()->queue_resource_preview(deferred_file_thumbnails[index], callable_mp(this, &FileSystemDock::_file_list_thumbnail_done).bind(index, files->get_item_text(index)));
 			deferred_file_thumbnails.erase(index);
 		}
