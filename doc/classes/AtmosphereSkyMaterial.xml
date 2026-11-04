@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="AtmosphereSkyMaterial" inherits="Material" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A physically based sky with atmospheric scattering, for use in a [Sky] resource.
+	</brief_description>
+	<description>
+		[AtmosphereSkyMaterial] renders a physically based sky by simulating how light from up to four [DirectionalLight3D]s scatters in a planet's atmosphere. It models Rayleigh scattering from air molecules, Mie scattering and absorption from aerosols, absorption from ozone, multiple scattering, the planet's shadow and the light reflected by the ground. The sky responds correctly to the light's elevation (day, sunset, twilight) and to the observer's altitude, all the way to space.
+		The implementation follows "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (Sébastien Hillaire, 2020). Transmittance and multiple scattering lookup tables are computed on the CPU whenever a property that affects them changes, and single scattering is raymarched in the sky shader's quarter resolution pass. The default values describe the Earth's atmosphere.
+		Light disks are drawn with physically based radiance using each light's [member Light3D.light_angular_distance], or 0.5 degrees if it is [code]0[/code]. They are not drawn into the radiance map, since the lights already provide their own specular reflections.
+		Changing [member ground_radius], [member atmosphere_height], [member ground_albedo], [member multi_scattering_factor] or any Rayleigh, Mie or ozone property rebuilds the lookup tables on the CPU, which takes tens of milliseconds. Avoid animating them every frame. [member energy_multiplier], [member observer_altitude] and the lights themselves are cheap to change.
+		Light energy is treated as illuminance, in lux when [member ProjectSettings.rendering/lights_and_shadows/use_physical_light_units] is enabled. With physical light units, set [member Environment.background_intensity] to [code]1.0[/code] to avoid scaling the sky's luminance a second time. Light energy given to sky shaders already includes the camera's exposure normalization, which is applied to the background again, so compensate with [member energy_multiplier] when using [CameraAttributes].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="atmosphere_height" type="float" setter="set_atmosphere_height" getter="get_atmosphere_height" default="100.0">
+			Thickness of the atmosphere above the ground, in kilometers.
+		</member>
+		<member name="energy_multiplier" type="float" setter="set_energy_multiplier" getter="get_energy_multiplier" default="1.0">
+			Multiplier for the sky's luminance, including the light disks. Does not change how the lights illuminate the scene.
+		</member>
+		<member name="ground_albedo" type="Color" setter="set_ground_albedo" getter="get_ground_albedo" default="Color(0.3, 0.3, 0.3, 1)">
+			Reflectance of the planet's surface. Affects the ground seen below the horizon and the light it bounces back into the atmosphere.
+		</member>
+		<member name="ground_radius" type="float" setter="set_ground_radius" getter="get_ground_radius" default="6360.0">
+			Radius of the planet, in kilometers.
+		</member>
+		<member name="mie_absorption_color" type="Color" setter="set_mie_absorption_color" getter="get_mie_absorption_color" default="Color(1, 1, 1, 1)">
+			Color of the light absorbed by aerosols. Multiplied by [member mie_absorption_scale].
+		</member>
+		<member name="mie_absorption_scale" type="float" setter="set_mie_absorption_scale" getter="get_mie_absorption_scale" default="0.000444">
+			Absorption coefficient of aerosols at sea level, in 1/km.
+		</member>
+		<member name="mie_anisotropy" type="float" setter="set_mie_anisotropy" getter="get_mie_anisotropy" default="0.8">
+			How much light aerosols scatter forward. Higher values make the glow around the sun tighter and brighter.
+		</member>
+		<member name="mie_scale_height" type="float" setter="set_mie_scale_height" getter="get_mie_scale_height" default="1.2">
+			Altitude in kilometers at which the aerosol density falls to about 37% ([code]1/e[/code]) of its sea level value.
+		</member>
+		<member name="mie_scattering_color" type="Color" setter="set_mie_scattering_color" getter="get_mie_scattering_color" default="Color(1, 1, 1, 1)">
+			Color of the light scattered by aerosols such as dust, smoke and water droplets. Multiplied by [member mie_scattering_scale].
+		</member>
+		<member name="mie_scattering_scale" type="float" setter="set_mie_scattering_scale" getter="get_mie_scattering_scale" default="0.003996">
+			Scattering coefficient of aerosols at sea level, in 1/km. Higher values make the sky hazier.
+		</member>
+		<member name="multi_scattering_factor" type="float" setter="set_multi_scattering_factor" getter="get_multi_scattering_factor" default="1.0">
+			Multiplier for light that scatters more than once. [code]1.0[/code] is physically correct.
+		</member>
+		<member name="night_sky" type="Texture2D" setter="set_night_sky" getter="get_night_sky">
+			Equirectangular panorama added to the sky behind the atmosphere, such as stars. It is dimmed by the atmosphere near the horizon and hidden by the ground.
+		</member>
+		<member name="observer_altitude" type="float" setter="set_observer_altitude" getter="get_observer_altitude" default="1.0">
+			Altitude of the observer above the ground, in meters. When [member use_camera_altitude] is enabled, the camera's Y position is added to it.
+		</member>
+		<member name="ozone_absorption_color" type="Color" setter="set_ozone_absorption_color" getter="get_ozone_absorption_color" default="Color(0.345561, 1, 0.045189, 1)">
+			Color of the light absorbed by ozone. Multiplied by [member ozone_absorption_scale].
+		</member>
+		<member name="ozone_absorption_scale" type="float" setter="set_ozone_absorption_scale" getter="get_ozone_absorption_scale" default="0.001881">
+			Absorption coefficient of ozone at its peak density, in 1/km. Ozone gives the zenith its blue tint at sunset and twilight.
+		</member>
+		<member name="ozone_altitude" type="float" setter="set_ozone_altitude" getter="get_ozone_altitude" default="25.0">
+			Altitude of the ozone layer's peak density, in kilometers.
+		</member>
+		<member name="ozone_width" type="float" setter="set_ozone_width" getter="get_ozone_width" default="30.0">
+			Thickness of the ozone layer, in kilometers. Its density decreases linearly away from [member ozone_altitude].
+		</member>
+		<member name="rayleigh_scale_height" type="float" setter="set_rayleigh_scale_height" getter="get_rayleigh_scale_height" default="8.0">
+			Altitude in kilometers at which the density of air falls to about 37% ([code]1/e[/code]) of its sea level value.
+		</member>
+		<member name="rayleigh_scattering_color" type="Color" setter="set_rayleigh_scattering_color" getter="get_rayleigh_scattering_color" default="Color(0.175287, 0.409607, 1, 1)">
+			Color of the light scattered by air molecules. Multiplied by [member rayleigh_scattering_scale]. Rayleigh scattering is what makes a clear sky blue.
+		</member>
+		<member name="rayleigh_scattering_scale" type="float" setter="set_rayleigh_scattering_scale" getter="get_rayleigh_scattering_scale" default="0.0331">
+			Scattering coefficient of air molecules at sea level, in 1/km.
+		</member>
+		<member name="use_camera_altitude" type="bool" setter="set_use_camera_altitude" getter="get_use_camera_altitude" default="false">
+			If [code]true[/code], the camera's Y position (in meters) is added to [member observer_altitude], so the sky changes as the camera climbs. The radiance map is then updated whenever the camera moves, which costs performance.
+		</member>
+		<member name="use_debanding" type="bool" setter="set_use_debanding" getter="get_use_debanding" default="true">
+			If [code]true[/code], enables debanding. Debanding adds a small amount of noise which helps reduce banding that appears from the smooth changes in color in the sky.
+		</member>
+	</members>
+</class>
