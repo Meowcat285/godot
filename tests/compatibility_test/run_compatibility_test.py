@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import subprocess
+import time
 import urllib.request
 from typing import Any
 
@@ -15,11 +16,21 @@ UTILITY_FUNCTIONS_FILE = PROJECT_PATH.joinpath("utility_functions.txt")
 
 
 def download_gdextension_api(reftag: str) -> dict[str, Any]:
-    with urllib.request.urlopen(
-        f"https://raw.githubusercontent.com/godotengine/godot-cpp/godot-{reftag}/gdextension/extension_api.json"
-    ) as f:
-        gdextension_api_json: dict[str, Any] = json.load(f)
-    return gdextension_api_json
+    # raw.githubusercontent.com intermittently returns 503s for this ~6 MB file, so retry a few times.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(
+                f"https://raw.githubusercontent.com/godotengine/godot-cpp/godot-{reftag}/gdextension/extension_api.json",
+                timeout=60,
+            ) as f:
+                gdextension_api_json: dict[str, Any] = json.load(f)
+            return gdextension_api_json
+        except Exception as e:
+            if attempt == 3:
+                raise
+            print(f"Downloading extension_api.json for {reftag} failed ({e}), retrying...", flush=True)
+            time.sleep(5 * 2**attempt)
+    raise AssertionError("unreachable")
 
 
 def remove_test_data_files():
