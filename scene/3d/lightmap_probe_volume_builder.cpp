@@ -298,7 +298,7 @@ bool LightmapProbeVolumeBuilder::is_valid_layout(const Vector3i &p_grid_size, co
 			return false;
 		}
 	}
-	return p_atlas_bricks.x <= MAX_ATLAS_BRICKS_XY && p_atlas_bricks.y <= MAX_ATLAS_BRICKS_XY && int64_t(p_atlas_bricks.z) * 4 * 3 + p_grid_size.z <= MAX_TEXTURE_SIZE;
+	return int64_t(p_grid_size.x) * p_grid_size.y * p_grid_size.z <= MAX_CELLS && p_atlas_bricks.x <= MAX_ATLAS_BRICKS_XY && p_atlas_bricks.y <= MAX_ATLAS_BRICKS_XY && int64_t(p_atlas_bricks.z) * 4 * 3 + p_grid_size.z <= MAX_TEXTURE_SIZE;
 }
 
 bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, uint32_t p_max_probes) {
