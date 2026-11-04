@@ -239,7 +239,11 @@ bool LightmapGIData::_is_using_spherical_gaussians() const {
 
 void LightmapGIData::_set_probe_volume_data(const Dictionary &p_data) {
 	probe_volume_data = p_data;
-	if (p_data.has("data")) {
+	if (p_data.has("data") && !LightmapProbeVolumeBuilder::is_valid_layout(p_data["grid_size"], p_data["atlas_bricks"])) {
+		ERR_PRINT("Invalid LightmapGI probe volume data, ignoring it. Bake the lightmap again.");
+		probe_volume_data = Dictionary();
+	}
+	if (probe_volume_data.has("data")) {
 		RS::get_singleton()->lightmap_set_probe_volume(lightmap, p_data["data"], p_data["grid_size"], p_data["atlas_bricks"], p_data["grid_xform"]);
 	} else {
 		RS::get_singleton()->lightmap_set_probe_volume(lightmap, Vector<uint8_t>(), Vector3i(), Vector3i(), Transform3D());

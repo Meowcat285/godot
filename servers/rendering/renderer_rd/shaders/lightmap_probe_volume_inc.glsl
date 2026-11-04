@@ -25,8 +25,10 @@ bool lightmap_probe_volume_sample(vec3 p_view_vertex, vec3 p_view_normal, out ve
 	if (any(lessThan(grid_pos, vec3(0.0))) || any(greaterThanEqual(grid_pos, grid_size))) {
 		return false;
 	}
-	// The normal in the lightmap's orientation, which the SH is stored in.
+	// The surface normal as a grid space direction, for the bias.
 	vec3 grid_normal = normalize(vec3(dot(lightmap_probe_volume.view_to_grid[0].xyz, p_view_normal), dot(lightmap_probe_volume.view_to_grid[1].xyz, p_view_normal), dot(lightmap_probe_volume.view_to_grid[2].xyz, p_view_normal)));
+	// The normal in the lightmap's orientation, which the SH is stored in.
+	vec3 sh_normal = normalize(vec3(dot(lightmap_probe_volume.normal_to_grid[0].xyz, p_view_normal), dot(lightmap_probe_volume.normal_to_grid[1].xyz, p_view_normal), dot(lightmap_probe_volume.normal_to_grid[2].xyz, p_view_normal)));
 
 	// Each cell holds bricks_per_axis^3 bricks of 4x4x4 probes, so probes are 1 / (3 * bricks_per_axis) apart.
 	vec4 cell = lightmap_probe_volume_fetch_cell(grid_pos);
@@ -56,7 +58,7 @@ bool lightmap_probe_volume_sample(vec3 p_view_vertex, vec3 p_view_normal, out ve
 	vec3 l1x = t2.gba;
 
 	// Same convolution constants as the per-object SH capture.
-	r_irradiance = 0.886227 * l0 + 1.023327 * (l1y * grid_normal.y + l1z * grid_normal.z + l1x * grid_normal.x);
+	r_irradiance = 0.886227 * l0 + 1.023327 * (l1y * sh_normal.y + l1z * sh_normal.z + l1x * sh_normal.x);
 	r_irradiance = max(r_irradiance, vec3(0.0));
 	return true;
 }

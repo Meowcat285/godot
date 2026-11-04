@@ -2251,6 +2251,9 @@ RID LightStorage::lightmap_probe_volume_fill_data(const PagedArray<RID> &p_light
 
 	const Transform3D view_to_grid = best->probe_volume_grid_xform * best_xform.affine_inverse() * p_cam_transform;
 	MaterialStorage::store_transform_transposed_3x4(view_to_grid, r_data.view_to_grid);
+	// Same normal transform as the regular lightmap SH, so non-uniformly scaled LightmapGI nodes sample the right direction.
+	const Basis normal_to_grid = (best_xform.basis.inverse() * p_cam_transform.basis).inverse().transposed();
+	MaterialStorage::store_transform_transposed_3x4(Transform3D(normal_to_grid), r_data.normal_to_grid);
 	for (int i = 0; i < 3; i++) {
 		r_data.grid_size[i] = best->probe_volume_grid_size[i];
 		r_data.atlas_bricks[i] = best->probe_volume_atlas_bricks[i];

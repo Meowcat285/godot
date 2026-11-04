@@ -83,5 +83,7 @@ public:
 		AABB aabb;
 		int bricks_per_axis = 1;
 	};
+	// True if the sizes are positive and fit the limits the builder bakes with, so the packed texture size can't overflow.
+	static bool is_valid_layout(const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks);
 	static bool decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, bool p_include_probes = true);
 };

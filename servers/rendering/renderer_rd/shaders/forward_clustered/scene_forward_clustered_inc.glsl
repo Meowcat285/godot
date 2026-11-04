@@ -528,6 +528,7 @@ layout(set = 1, binding = 39) uniform texture3D lightmap_probe_volume_texture;
 
 layout(set = 1, binding = 40, std140) uniform LightmapProbeVolumeBlock {
 	vec4 view_to_grid[3]; // Rows of the view space to grid space transform.
+	vec4 normal_to_grid[3]; // Rows of the view space to lightmap space normal transform.
 	uvec4 grid_size; // .w is 1 when a volume is active.
 	uvec4 atlas_bricks;
 }

@@ -1105,6 +1105,7 @@ public:
 	// Matches LightmapProbeVolumeBlock in the scene shaders (std140).
 	struct LightmapProbeVolumeData {
 		float view_to_grid[12]; // Rows of the view space to grid space transform.
+		float normal_to_grid[12]; // Rows of the view space to lightmap space normal transform (inverse transpose), .w unused.
 		uint32_t grid_size[4]; // .w is 1 when a volume is active.
 		uint32_t atlas_bricks[4];
 	};

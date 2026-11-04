@@ -292,6 +292,15 @@ Dictionary LightmapProbeVolumeBuilder::build_data(const LocalVector<Color> &p_sh
 	return d;
 }
 
+bool LightmapProbeVolumeBuilder::is_valid_layout(const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks) {
+	for (int i = 0; i < 3; i++) {
+		if (p_grid_size[i] < 1 || p_grid_size[i] > MAX_TEXTURE_SIZE || p_atlas_bricks[i] < 1) {
+			return false;
+		}
+	}
+	return p_atlas_bricks.x <= MAX_ATLAS_BRICKS_XY && p_atlas_bricks.y <= MAX_ATLAS_BRICKS_XY && int64_t(p_atlas_bricks.z) * 4 * 3 + p_grid_size.z <= MAX_TEXTURE_SIZE;
+}
+
 bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, bool p_include_probes) {
 	r_positions.clear();
 	r_sh.clear();
@@ -303,6 +312,7 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 	const Vector<uint8_t> data = p_data["data"];
 	const Vector3i grid_size = p_data["grid_size"];
 	const Vector3i atlas_bricks = p_data["atlas_bricks"];
+	ERR_FAIL_COND_V(!is_valid_layout(grid_size, atlas_bricks), false);
 	const Transform3D grid_to_local = Transform3D(p_data["grid_xform"]).affine_inverse();
 	const Vector3i tex_size(MAX(atlas_bricks.x * 4, grid_size.x), MAX(atlas_bricks.y * 4, grid_size.y), atlas_bricks.z * 4 * 3 + grid_size.z);
 	ERR_FAIL_COND_V(int64_t(data.size()) != int64_t(tex_size.x) * tex_size.y * tex_size.z * 4 * int64_t(sizeof(uint16_t)), false);
