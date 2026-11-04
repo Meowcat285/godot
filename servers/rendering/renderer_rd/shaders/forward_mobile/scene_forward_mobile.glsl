@@ -923,8 +923,8 @@ layout(location = 13) in highp vec4 prev_screen_position;
 
 #ifdef USE_LIGHTMAP
 #include "../bicubic_filter_inc.glsl"
-#include "../lightmap_sg_inc.glsl"
 #include "../lightmap_probe_volume_inc.glsl"
+#include "../lightmap_sg_inc.glsl"
 #endif //USE_LIGHTMAP
 
 #ifdef USE_MULTIVIEW
