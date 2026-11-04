@@ -301,7 +301,7 @@ bool LightmapProbeVolumeBuilder::is_valid_layout(const Vector3i &p_grid_size, co
 	return p_atlas_bricks.x <= MAX_ATLAS_BRICKS_XY && p_atlas_bricks.y <= MAX_ATLAS_BRICKS_XY && int64_t(p_atlas_bricks.z) * 4 * 3 + p_grid_size.z <= MAX_TEXTURE_SIZE;
 }
 
-bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, bool p_include_probes) {
+bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVector<Vector3> &r_positions, LocalVector<Color> &r_sh, LocalVector<float> &r_spacing, LocalVector<DebugCell> &r_cells, uint32_t p_max_probes) {
 	r_positions.clear();
 	r_sh.clear();
 	r_spacing.clear();
@@ -324,6 +324,7 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 	};
 	const float cell_size = grid_to_local.basis.get_scale().x;
 
+	bool include_probes = p_max_probes > 0;
 	// Probes shared by bricks and cells are drawn once. Keys are in units of the finest possible spacing.
 	HashSet<Vector3i> seen;
 	for (int z = 0; z < grid_size.z; z++) {
@@ -340,7 +341,7 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 				cell.aabb = grid_to_local.xform(AABB(Vector3(x, y, z), Vector3(1, 1, 1)));
 				cell.bricks_per_axis = n;
 				r_cells.push_back(cell);
-				if (!p_include_probes) {
+				if (!include_probes) {
 					continue;
 				}
 
@@ -355,7 +356,15 @@ bool LightmapProbeVolumeBuilder::decode_data(const Dictionary &p_data, LocalVect
 									for (int px = 0; px < 4; px++) {
 										const Vector3i local = Vector3i(bx, by, bz) * 3 + Vector3i(px, py, pz);
 										const Vector3i key = Vector3i(x, y, z) * 24 + local * key_step;
-										if (seen.has(key)) {
+										if (!include_probes || seen.has(key)) {
+											continue;
+										}
+										if (r_positions.size() >= p_max_probes) {
+											include_probes = false;
+											r_positions.clear();
+											r_sh.clear();
+											r_spacing.clear();
+											seen.clear();
 											continue;
 										}
 										seen.insert(key);

@@ -84,7 +84,7 @@ static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<Li
 	constexpr int MAX_DRAWN_PROBES = 50000;
 	const Dictionary volume = p_data->_get_probe_volume_data();
 	const bool draw_probes = int(volume.get("probe_count", 0)) <= MAX_DRAWN_PROBES && !Math::is_zero_approx(p_probe_size);
-	if (!LightmapProbeVolumeBuilder::decode_data(volume, positions, sh, spacing, cells, draw_probes)) {
+	if (!LightmapProbeVolumeBuilder::decode_data(volume, positions, sh, spacing, cells, draw_probes ? MAX_DRAWN_PROBES : 0)) {
 		return false;
 	}
 
@@ -105,7 +105,7 @@ static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<Li
 		}
 	}
 
-	if (!draw_probes) {
+	if (positions.is_empty()) {
 		return true;
 	}
 
