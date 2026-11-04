@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://viewer.gd" id="1_vn3k5"]
+[ext_resource type="PackedScene" path="res://room.tscn" id="2_2u40u"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xk44o"]
+albedo_color = Color(0.85, 0.85, 0.85, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_0s78v"]
+material = SubResource("StandardMaterial3D_xk44o")
+
+[sub_resource type="BoxMesh" id="BoxMesh_ui0cx"]
+material = SubResource("StandardMaterial3D_xk44o")
+
+[sub_resource type="SphereMesh" id="SphereMesh_t7cso"]
+material = SubResource("StandardMaterial3D_xk44o")
+
+[node name="ProbesClassic" type="Node3D" unique_id=808446206]
+script = ExtResource("1_vn3k5")
+
+[node name="Room" type="Node3D" parent="." unique_id=711458621 instance=ExtResource("2_2u40u")]
+
+[node name="LightmapGI" type="LightmapGI" parent="." unique_id=662649586]
+quality = 2
+interior = true
+probe_volume_spacing = 0.5
+
+[node name="Column" type="MeshInstance3D" parent="." unique_id=608231507]
+transform = Transform3D(0.6, 0, 0, 0, 3.6, 0, 0, 0, 0.6, -5.2, 1.8, 2)
+gi_mode = 2
+mesh = SubResource("BoxMesh_0s78v")
+
+[node name="Bar" type="MeshInstance3D" parent="." unique_id=1757206895]
+transform = Transform3D(7.5, 0, 0, 0, 0.4, 0, 0, 0, 0.4, 1.75, 1, 0.25)
+gi_mode = 2
+mesh = SubResource("BoxMesh_ui0cx")
+
+[node name="Ball" type="MeshInstance3D" parent="." unique_id=253985817]
+transform = Transform3D(1.6, 0, 0, 0, 1.6, 0, 0, 0, 1.6, -2.8, 0.8, 3.8)
+gi_mode = 2
+mesh = SubResource("SphereMesh_t7cso")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=834390408]
+transform = Transform3D(0.67267275, -0.10832254, 0.7319683, 0, 0.9892264, 0.14639366, -0.7399401, -0.098475024, 0.66542566, 4.5, 1.7, 4.5)
+fov = 65.0

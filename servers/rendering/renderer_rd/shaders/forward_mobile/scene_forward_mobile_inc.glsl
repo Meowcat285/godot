@@ -437,6 +437,17 @@ layout(set = 1, binding = 25, std430) buffer restrict MaterialFeedbackBuffer {
 material_feedback;
 #endif
 
+// LightmapGI adaptive probe volume, see lightmap_probe_volume_inc.glsl.
+layout(set = 1, binding = 26) uniform texture3D lightmap_probe_volume_texture;
+
+layout(set = 1, binding = 27, std140) uniform LightmapProbeVolumeBlock {
+	vec4 view_to_grid[3]; // Rows of the view space to grid space transform.
+	vec4 normal_to_grid[3]; // Rows of the view space to lightmap space normal transform.
+	uvec4 grid_size; // .w is 1 when a volume is active.
+	uvec4 atlas_bricks;
+}
+lightmap_probe_volume;
+
 /* Set 2 Skeleton & Instancing (can change per item) */
 
 layout(set = 2, binding = 0, std430) restrict readonly buffer Transforms {

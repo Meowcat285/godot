@@ -1279,6 +1279,10 @@ void RenderForwardClustered::_setup_lightmaps(const RenderDataRD *p_render_data,
 	if (scene_state.lightmaps_used > 0) {
 		RD::get_singleton()->buffer_update(scene_state.lightmap_buffer, 0, sizeof(LightmapData) * scene_state.lightmaps_used, scene_state.lightmaps);
 	}
+
+	RendererRD::LightStorage::LightmapProbeVolumeData probe_volume_data;
+	scene_state.lightmap_probe_volume_texture = light_storage->lightmap_probe_volume_fill_data(p_lightmaps, p_cam_transform, probe_volume_data);
+	RD::get_singleton()->buffer_update(scene_state.lightmap_probe_volume_buffer, 0, sizeof(probe_volume_data), &probe_volume_data);
 }
 
 /* SDFGI */
@@ -3882,6 +3886,25 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u.append_id(texture);
 		uniforms.push_back(u);
 	}
+	{
+		RD::Uniform u;
+		u.binding = 39;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID texture = scene_state.lightmap_probe_volume_texture;
+		if (texture.is_null() || !RD::get_singleton()->texture_is_valid(texture)) {
+			texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_3D_BLACK);
+		}
+		u.append_id(texture);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 40;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.append_id(scene_state.lightmap_probe_volume_buffer);
+		uniforms.push_back(u);
+	}
+
 #ifdef MODULE_TEXTURE_STREAMING_ENABLED
 	{
 		RD::Uniform u;
@@ -5292,6 +5315,7 @@ RenderForwardClustered::RenderForwardClustered() {
 			scene_state.max_lightmap_captures = 2048;
 			scene_state.lightmap_captures = memnew_arr(LightmapCaptureData, scene_state.max_lightmap_captures);
 			scene_state.lightmap_capture_buffer = RD::get_singleton()->storage_buffer_create(sizeof(LightmapCaptureData) * scene_state.max_lightmap_captures);
+			scene_state.lightmap_probe_volume_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RendererRD::LightStorage::LightmapProbeVolumeData));
 		}
 		{
 			defines += "\n#define MATERIAL_UNIFORM_SET " + itos(MATERIAL_UNIFORM_SET) + "\n";
@@ -5455,6 +5479,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 		}
 		RD::get_singleton()->free_rid(scene_state.lightmap_buffer);
 		RD::get_singleton()->free_rid(scene_state.lightmap_capture_buffer);
+		RD::get_singleton()->free_rid(scene_state.lightmap_probe_volume_buffer);
 		for (uint32_t i = 0; i < RENDER_LIST_MAX; i++) {
 			scene_state.instance_buffer[i].uninit();
 		}

@@ -543,6 +543,7 @@ public:
 	FUNC2(lightmap_set_probe_bounds, RID, const AABB &)
 	FUNC2(lightmap_set_probe_interior, RID, bool)
 	FUNC5(lightmap_set_probe_capture_data, RID, const PackedVector3Array &, const PackedColorArray &, const PackedInt32Array &, const PackedInt32Array &)
+	FUNC5(lightmap_set_probe_volume, RID, const Vector<uint8_t> &, const Vector3i &, const Vector3i &, const Transform3D &)
 	FUNC2(lightmap_set_baked_exposure_normalization, RID, float)
 	FUNC1RC(PackedVector3Array, lightmap_get_probe_capture_points, RID)
 	FUNC1RC(PackedColorArray, lightmap_get_probe_capture_sh, RID)

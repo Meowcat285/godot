@@ -735,6 +735,11 @@ vec3 trace_environment_color(vec3 ray_dir) {
 	return textureLod(sampler2D(environment, linear_sampler), st / vec2(PI * 2.0, PI), 0.0).rgb;
 }
 
+#ifdef MODE_LIGHT_PROBES
+// Counts probe rays whose first hit is a backface, to find probes inside geometry.
+uint probe_backface_hits = 0;
+#endif
+
 vec3 trace_indirect_light(vec3 p_position, vec3 p_ray_dir, inout uint r_noise, float p_texel_size) {
 	// The lower limit considers the case where the lightmapper might have bounces disabled but light probes are requested.
 	vec3 position = p_position;
@@ -747,6 +752,11 @@ vec3 trace_indirect_light(vec3 p_position, vec3 p_ray_dir, inout uint r_noise, f
 		uint tidx;
 		vec3 barycentric;
 		uint trace_result = trace_ray_closest_hit_triangle(position + ray_dir * bake_params.bias, position + ray_dir * length(bake_params.world_size), tidx, barycentric);
+#ifdef MODE_LIGHT_PROBES
+		if (depth == 0 && trace_result == RAY_BACK) {
+			probe_backface_hits++;
+		}
+#endif
 		if (trace_result == RAY_FRONT) {
 			Vertex vert0 = vertices.data[triangles.data[tidx].indices.x];
 			Vertex vert1 = vertices.data[triangles.data[tidx].indices.y];
@@ -1204,6 +1214,8 @@ void main() {
 			probe_sh_accum[j].rgb += light * c[j];
 		}
 	}
+	// The alpha of the first coefficient accumulates the backface hit count; it ends up as the ratio of backface hits.
+	probe_sh_accum[0].a += float(probe_backface_hits);
 
 	if (params.ray_from > 0) {
 		for (uint j = 0; j < 9; j++) { //accum from existing
@@ -1215,6 +1227,7 @@ void main() {
 		for (uint j = 0; j < 9; j++) { //accum from existing
 			probe_sh_accum[j] *= 4.0 / float(params.ray_count);
 		}
+		probe_sh_accum[0].a *= 0.25;
 	}
 
 	for (uint j = 0; j < 9; j++) { //accum from existing

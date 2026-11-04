@@ -87,6 +87,8 @@ private:
 	void _set_probe_data(const Dictionary &p_data);
 	Dictionary _get_probe_data() const;
 
+	Dictionary probe_volume_data;
+
 	void _reset_lightmap_textures();
 	void _reset_shadowmask_textures();
 
@@ -118,6 +120,9 @@ public:
 
 	void _set_uses_spherical_gaussians(bool p_enable);
 	bool _is_using_spherical_gaussians() const;
+
+	void _set_probe_volume_data(const Dictionary &p_data);
+	Dictionary _get_probe_volume_data() const;
 
 	void update_shadowmask_mode(ShadowmaskMode p_mode);
 	ShadowmaskMode get_shadowmask_mode() const;
@@ -217,6 +222,9 @@ private:
 	Ref<CameraAttributes> camera_attributes;
 	float specular_intensity = 0.0f;
 	bool use_spherical_gaussians = false;
+	bool probe_volume_enabled = false;
+	float probe_volume_spacing = 1.0;
+	int probe_volume_subdivisions = 3;
 
 	Ref<LightmapGIData> light_data;
 	Node *last_owner = nullptr;
@@ -363,6 +371,15 @@ public:
 
 	void set_use_spherical_gaussians(bool p_enable);
 	bool is_using_spherical_gaussians() const;
+
+	void set_probe_volume_enabled(bool p_enable);
+	bool is_probe_volume_enabled() const;
+
+	void set_probe_volume_spacing(float p_spacing);
+	float get_probe_volume_spacing() const;
+
+	void set_probe_volume_subdivisions(int p_subdivisions);
+	int get_probe_volume_subdivisions() const;
 
 	AABB get_aabb() const override;
 

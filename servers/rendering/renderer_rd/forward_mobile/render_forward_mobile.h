@@ -301,6 +301,8 @@ private:
 		LightmapCaptureData *lightmap_captures = nullptr;
 		uint32_t max_lightmap_captures;
 		RID lightmap_capture_buffer;
+		RID lightmap_probe_volume_buffer;
+		RID lightmap_probe_volume_texture;
 
 		bool used_screen_texture = false;
 		bool used_depth_texture = false;

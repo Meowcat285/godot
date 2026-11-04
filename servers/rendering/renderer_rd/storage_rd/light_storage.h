@@ -366,6 +366,11 @@ private:
 		PackedInt32Array tetrahedra;
 		PackedInt32Array bsp_tree;
 		float specular_intensity = 0.0f;
+		// Adaptive probe volume (see lightmap_set_probe_volume()).
+		RID probe_volume_texture;
+		Vector3i probe_volume_grid_size;
+		Vector3i probe_volume_atlas_bricks;
+		Transform3D probe_volume_grid_xform;
 
 		struct BSP {
 			static const int32_t EMPTY_LEAF = INT32_MIN;
@@ -1028,6 +1033,7 @@ public:
 	virtual void lightmap_set_probe_bounds(RID p_lightmap, const AABB &p_bounds) override;
 	virtual void lightmap_set_probe_interior(RID p_lightmap, bool p_interior) override;
 	virtual void lightmap_set_probe_capture_data(RID p_lightmap, const PackedVector3Array &p_points, const PackedColorArray &p_point_sh, const PackedInt32Array &p_tetrahedra, const PackedInt32Array &p_bsp_tree) override;
+	virtual void lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_t> &p_data, const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks, const Transform3D &p_grid_xform) override;
 	virtual void lightmap_set_baked_exposure_normalization(RID p_lightmap, float p_exposure) override;
 	virtual PackedVector3Array lightmap_get_probe_capture_points(RID p_lightmap) const override;
 	virtual PackedColorArray lightmap_get_probe_capture_sh(RID p_lightmap) const override;
@@ -1079,6 +1085,33 @@ public:
 		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
 		return lm->light_texture_size;
 	}
+	_FORCE_INLINE_ RID lightmap_get_probe_volume_texture(RID p_lightmap) const {
+		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+		return lm->probe_volume_texture;
+	}
+	_FORCE_INLINE_ Vector3i lightmap_get_probe_volume_grid_size(RID p_lightmap) const {
+		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+		return lm->probe_volume_grid_size;
+	}
+	_FORCE_INLINE_ Vector3i lightmap_get_probe_volume_atlas_bricks(RID p_lightmap) const {
+		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+		return lm->probe_volume_atlas_bricks;
+	}
+	_FORCE_INLINE_ Transform3D lightmap_get_probe_volume_grid_xform(RID p_lightmap) const {
+		const Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
+		return lm->probe_volume_grid_xform;
+	}
+
+	// Matches LightmapProbeVolumeBlock in the scene shaders (std140).
+	struct LightmapProbeVolumeData {
+		float view_to_grid[12]; // Rows of the view space to grid space transform.
+		float normal_to_grid[12]; // Rows of the view space to lightmap space normal transform (inverse transpose), .w unused.
+		uint32_t grid_size[4]; // .w is 1 when a volume is active.
+		uint32_t atlas_bricks[4];
+	};
+	// Picks the probe volume dynamic objects sample per pixel: the one around the camera, else the nearest one.
+	// Returns its texture, or an invalid RID if none of the lightmaps has one.
+	RID lightmap_probe_volume_fill_data(const PagedArray<RID> &p_lightmap_instances, const Transform3D &p_cam_transform, LightmapProbeVolumeData &r_data);
 	_FORCE_INLINE_ uint64_t lightmap_array_get_version() const {
 		ERR_FAIL_COND_V(!using_lightmap_array, 0); //only for arrays
 		return lightmap_array_version;
