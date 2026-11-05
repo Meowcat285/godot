@@ -16,6 +16,7 @@ merged into `slop` early. Each was merged as-is (no fork-side edits) with a
 | [#118532](https://github.com/godotengine/godot/pull/118532) | Make Camera3D inspector preview match viewport project settings | `f7f8061a733df9385890fe20b5c573d661a12d18` | 2026-10-29 |
 | [#116392](https://github.com/godotengine/godot/pull/116392) | Add curve auto-tangent button for Path2D and Path3D | `ed8fb928f2f7ed2f39c642cc120b58cb7d649fc3` | 2026-10-29 |
 | [#106794](https://github.com/godotengine/godot/pull/106794) | Add multi-node 3D collision based snapping | `244d8b40a7bb3595c902068df9b38cd07d07af30` | 2026-10-29 |
+| [#124989](https://github.com/godotengine/godot/pull/124989) | Don't print remapped path if it's the same | `a1e09059ebe321db5533029337d631a13ca3fd71` | 2026-11-05 |
 
 ## Re-syncing
 
