@@ -1,0 +1,86 @@
+name: 🧹 Clean up pre-releases
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Delete pre-releases published more than this many days ago.
+        type: number
+        required: true
+        default: 30
+      keep-latest:
+        description: Keep the newest pre-release of each branch that still exists, so it stays in the launcher's branch picker and its next build can still get a delta from it.
+        type: boolean
+        default: true
+      dry-run:
+        description: Only list what would be deleted.
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# Deleting a pre-release only shortens delta chains: the delta from a build to the next one is stored in the next
+# build's release, so users on a deleted build can still update to the next one with a delta. Users further back
+# fall back to downloading the full build, which the launcher already does when no chain exists.
+# Pre-release tags don't affect the numbering of new releases (see `release-name` in runner.yml).
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    name: Clean up pre-releases
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Delete old pre-releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAYS: ${{ inputs.days }}
+          KEEP_LATEST: ${{ inputs.keep-latest }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if ! [[ "${DAYS}" =~ ^[0-9]+$ ]]; then
+            echo "::error::days must be a whole number, got '${DAYS}'."
+            exit 1
+          fi
+          cutoff="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Deleting pre-releases published before ${cutoff}."
+
+          # Slugs of the existing branches, made the same way as in `release-name` in runner.yml.
+          live_slugs="[]"
+          if [[ "${KEEP_LATEST}" == "true" ]]; then
+            live_slugs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" --jq '.[].name' \
+              | while IFS= read -r branch; do echo -n "${branch}" | tr -c '0-9A-Za-z-' '-'; echo; done \
+              | jq -R . | jq -sc 'unique')"
+          fi
+
+          # Pre-release tags are `<release name>-<branch slug>.<run number>`, as `PRERELEASE_TAG` in
+          # misc/scripts/generate_delta_patches.py matches them. Pre-releases with other tags (made by hand) are left alone, so
+          # hand-made ones should not use that format. The newest pre-release of each existing branch is kept.
+          tags="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' \
+            | jq -sr --arg cutoff "${cutoff}" --argjson live "${live_slugs}" '
+              map(select(.prerelease and (.draft | not))
+                | . + {branch: ((.tag_name | capture("^[0-9]+\\.[0-9]+\\.[0-9]+-(?<b>[0-9A-Za-z-]+)\\.[0-9]+$") | .b) // null)}
+                | select(.branch != null))
+              | (map(select(.branch as $b | $live | index($b)))
+                 | group_by(.branch) | map(max_by(.published_at).tag_name)) as $kept
+              | map(select(.published_at < $cutoff and (.tag_name as $t | $kept | index($t) | not)))
+              | sort_by(.published_at) | .[].tag_name')"
+
+          if [[ -z "${tags}" ]]; then
+            echo "Nothing to delete."
+            exit 0
+          fi
+          count="$(wc -l <<< "${tags}")"
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "Dry run, would delete ${count} pre-release(s):"
+            echo "${tags}"
+            exit 0
+          fi
+          echo "Deleting ${count} pre-release(s)."
+          failed=0
+          while IFS= read -r tag; do
+            echo "Deleting ${tag}"
+            gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes || failed=1
+          done <<< "${tags}"
+          exit "${failed}"
