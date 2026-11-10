@@ -154,7 +154,12 @@ Vector<String> EditorFileSystemDirectory::get_file_deps(int p_idx) const {
 			if (ResourceUID::get_singleton()->has_id(uid)) {
 				dep = ResourceUID::get_singleton()->get_id_path(uid);
 			} else {
-				continue;
+				// Unknown UID: use the fallback path ("uid::type::path"), like the resource loader does.
+				const String &full_dep = files[p_idx]->deps[i];
+				dep = full_dep.get_slice_count("::") >= 3 ? full_dep.get_slice("::", 2) : String();
+				if (dep.is_empty() || !FileAccess::exists(dep)) {
+					continue;
+				}
 			}
 		}
 		deps.push_back(dep);
