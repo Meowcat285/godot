@@ -808,18 +808,25 @@ bool FileAccessGCAS::_read_chunk_data(const Chunk &p_chunk, uint8_t *r_dst) cons
 	if (f.is_null()) {
 		return false;
 	}
-	f->seek(loc.offset);
 	GCASIOStats::reads.increment();
 	if (loc.codec == GCAS_CHUNK_CODEC_RAW) {
 		GCASIOStats::bytes_read.add(loc.size);
-		return f->get_buffer(r_dst, loc.size) == loc.size;
+		uint64_t read_start = OS::get_singleton()->get_ticks_usec();
+		f->seek(loc.offset);
+		bool ok = f->get_buffer(r_dst, loc.size) == loc.size;
+		GCASIOStats::read_usec.add(OS::get_singleton()->get_ticks_usec() - read_start);
+		return ok;
 	}
 
 	if (uint32_t(compressed_buffer.size()) < loc.compressed_size) {
 		compressed_buffer.resize_uninitialized(loc.compressed_size);
 	}
 	GCASIOStats::bytes_read.add(loc.compressed_size);
-	ERR_FAIL_COND_V_MSG(f->get_buffer(compressed_buffer.ptrw(), loc.compressed_size) != loc.compressed_size, false, vformat("Truncated GCAS chunk in \"%s\".", path));
+	uint64_t read_start = OS::get_singleton()->get_ticks_usec();
+	f->seek(loc.offset);
+	uint64_t read = f->get_buffer(compressed_buffer.ptrw(), loc.compressed_size);
+	GCASIOStats::read_usec.add(OS::get_singleton()->get_ticks_usec() - read_start);
+	ERR_FAIL_COND_V_MSG(read != loc.compressed_size, false, vformat("Truncated GCAS chunk in \"%s\".", path));
 	uint64_t decompress_start = OS::get_singleton()->get_ticks_usec();
 	int64_t ret = Compression::decompress(r_dst, loc.size, compressed_buffer.ptr(), loc.compressed_size, Compression::MODE_ZSTD);
 	GCASIOStats::decompress_usec.add(OS::get_singleton()->get_ticks_usec() - decompress_start);
@@ -835,6 +842,8 @@ bool FileAccessGCAS::_get_chunk(int64_t p_chunk, Vector<uint8_t> &r_data, bool p
 	if (cacheable && cache->get(c.location.hash, r_data)) {
 		return true;
 	}
+	// Drop the previous data first: it may be shared with the cache, and resizing it would copy it.
+	r_data.clear();
 	r_data.resize_uninitialized(c.location.size);
 	if (!_read_chunk_data(c, r_data.ptrw())) {
 		r_data.clear();
@@ -898,15 +907,19 @@ uint64_t FileAccessGCAS::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
 				eof = true;
 				break;
 			}
-			f->seek(c.location.offset + in_chunk);
 			GCASIOStats::reads.increment();
 			GCASIOStats::bytes_read.add(n);
-			if (f->get_buffer(p_dst + done, n) != n) {
+			uint64_t read_start = OS::get_singleton()->get_ticks_usec();
+			f->seek(c.location.offset + in_chunk);
+			uint64_t read = f->get_buffer(p_dst + done, n);
+			GCASIOStats::read_usec.add(OS::get_singleton()->get_ticks_usec() - read_start);
+			if (read != n) {
 				eof = true;
 				break;
 			}
 		} else {
-			if (!_get_chunk(ci, current_data, true)) {
+			// Sequential reads are served by current_data, keep them out of the shared cache.
+			if (!_get_chunk(ci, current_data, false)) {
 				current_chunk = -1;
 				eof = true;
 				break;
