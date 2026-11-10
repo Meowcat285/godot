@@ -141,6 +141,7 @@ struct GCASIOStats {
 	static inline SafeNumeric<uint64_t> bytes_read{ 0 }; // Chunk bytes read from pack files.
 	static inline SafeNumeric<uint64_t> bytes_decompressed{ 0 };
 	static inline SafeNumeric<uint64_t> decompress_usec{ 0 };
+	static inline SafeNumeric<uint64_t> read_usec{ 0 }; // Time spent seeking and reading chunks from pack files.
 };
 
 // Decompressed chunks, shared by all open GCAS files.
