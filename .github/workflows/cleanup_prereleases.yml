@@ -26,9 +26,9 @@ concurrency:
 # Pre-release tags don't affect the numbering of new releases (see `release-name` in runner.yml).
 jobs:
   cleanup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     name: Clean up pre-releases
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
