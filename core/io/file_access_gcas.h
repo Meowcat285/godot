@@ -36,6 +36,7 @@
 #include "core/templates/hash_map.h"
 #include "core/templates/list.h"
 #include "core/templates/local_vector.h"
+#include "core/templates/safe_refcount.h"
 
 // GCAS ("Godot content-addressed store") packs.
 //
@@ -130,6 +131,16 @@ struct GCASHeader {
 
 	void encode(uint8_t r_buffer[GCAS_HEADER_SIZE]) const;
 	bool decode(const uint8_t *p_buffer, uint32_t p_size);
+};
+
+// Runtime IO counters, cumulative since startup (shown as performance monitors by the CAS module).
+struct GCASIOStats {
+	static inline SafeNumeric<uint64_t> files_opened; // FileAccessGCAS instances created.
+	static inline SafeNumeric<uint64_t> pack_handles_opened; // OS handles opened on pack files.
+	static inline SafeNumeric<uint64_t> reads; // Chunk data read calls on pack files (excludes the index read when mounting).
+	static inline SafeNumeric<uint64_t> bytes_read; // Chunk bytes read from pack files.
+	static inline SafeNumeric<uint64_t> bytes_decompressed;
+	static inline SafeNumeric<uint64_t> decompress_usec;
 };
 
 // Decompressed chunks, shared by all open GCAS files.

@@ -797,6 +797,7 @@ Ref<FileAccess> FileAccessGCAS::_get_pack_handle(uint32_t p_pack_file) const {
 	if (f.is_null()) {
 		f = FileAccess::open(pack_paths[p_pack_file], FileAccess::READ);
 		ERR_FAIL_COND_V_MSG(f.is_null(), Ref<FileAccess>(), vformat("Can't open GCAS pack \"%s\".", pack_paths[p_pack_file]));
+		GCASIOStats::pack_handles_opened.increment();
 	}
 	return f;
 }
@@ -808,15 +809,21 @@ bool FileAccessGCAS::_read_chunk_data(const Chunk &p_chunk, uint8_t *r_dst) cons
 		return false;
 	}
 	f->seek(loc.offset);
+	GCASIOStats::reads.increment();
 	if (loc.codec == GCAS_CHUNK_CODEC_RAW) {
+		GCASIOStats::bytes_read.add(loc.size);
 		return f->get_buffer(r_dst, loc.size) == loc.size;
 	}
 
 	if (uint32_t(compressed_buffer.size()) < loc.compressed_size) {
 		compressed_buffer.resize_uninitialized(loc.compressed_size);
 	}
+	GCASIOStats::bytes_read.add(loc.compressed_size);
 	ERR_FAIL_COND_V_MSG(f->get_buffer(compressed_buffer.ptrw(), loc.compressed_size) != loc.compressed_size, false, vformat("Truncated GCAS chunk in \"%s\".", path));
+	uint64_t decompress_start = OS::get_singleton()->get_ticks_usec();
 	int64_t ret = Compression::decompress(r_dst, loc.size, compressed_buffer.ptr(), loc.compressed_size, Compression::MODE_ZSTD);
+	GCASIOStats::decompress_usec.add(OS::get_singleton()->get_ticks_usec() - decompress_start);
+	GCASIOStats::bytes_decompressed.add(loc.size);
 	ERR_FAIL_COND_V_MSG(ret != int64_t(loc.size), false, vformat("Corrupted GCAS chunk in \"%s\".", path));
 	return true;
 }
@@ -892,6 +899,8 @@ uint64_t FileAccessGCAS::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
 				break;
 			}
 			f->seek(c.location.offset + in_chunk);
+			GCASIOStats::reads.increment();
+			GCASIOStats::bytes_read.add(n);
 			if (f->get_buffer(p_dst + done, n) != n) {
 				eof = true;
 				break;
@@ -943,4 +952,5 @@ FileAccessGCAS::FileAccessGCAS(const String &p_path, uint64_t p_size, const Loca
 	pack_paths = p_pack_paths;
 	pack_handles.resize(pack_paths.size());
 	open = true;
+	GCASIOStats::files_opened.increment();
 }
