@@ -31,6 +31,7 @@
 #include "register_types.h"
 
 #include "cas_layout.h"
+#include "gcas_monitors.h"
 #include "gcas_packer.h"
 
 #include "core/config/project_settings.h"
@@ -51,6 +52,7 @@ void initialize_cas_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(CASLayout);
 		GDREGISTER_CLASS(CASLayoutProvider);
 		GDREGISTER_CLASS(GCASPacker);
+		gcas_monitors_register();
 	}
 
 #ifdef TOOLS_ENABLED
@@ -85,5 +87,6 @@ void uninitialize_cas_module(ModuleInitializationLevel p_level) {
 #endif
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GCASPacker::clear_export_layout_providers();
+		gcas_monitors_unregister();
 	}
 }
