@@ -135,12 +135,12 @@ struct GCASHeader {
 
 // Runtime IO counters, cumulative since startup (shown as performance monitors by the CAS module).
 struct GCASIOStats {
-	static inline SafeNumeric<uint64_t> files_opened; // FileAccessGCAS instances created.
-	static inline SafeNumeric<uint64_t> pack_handles_opened; // OS handles opened on pack files.
-	static inline SafeNumeric<uint64_t> reads; // Chunk data read calls on pack files (excludes the index read when mounting).
-	static inline SafeNumeric<uint64_t> bytes_read; // Chunk bytes read from pack files.
-	static inline SafeNumeric<uint64_t> bytes_decompressed;
-	static inline SafeNumeric<uint64_t> decompress_usec;
+	static inline SafeNumeric<uint64_t> files_opened{ 0 }; // FileAccessGCAS instances created.
+	static inline SafeNumeric<uint64_t> pack_handles_opened{ 0 }; // OS handles opened on pack files.
+	static inline SafeNumeric<uint64_t> reads{ 0 }; // Chunk data read calls on pack files (excludes the index read when mounting).
+	static inline SafeNumeric<uint64_t> bytes_read{ 0 }; // Chunk bytes read from pack files.
+	static inline SafeNumeric<uint64_t> bytes_decompressed{ 0 };
+	static inline SafeNumeric<uint64_t> decompress_usec{ 0 };
 };
 
 // Decompressed chunks, shared by all open GCAS files.
