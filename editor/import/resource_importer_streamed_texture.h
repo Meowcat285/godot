@@ -68,9 +68,7 @@ public:
 	virtual bool is_import_path_independent() const override { return true; }
 	virtual bool can_share_import_cache() const override { return true; }
 	virtual String get_resource_type() const override;
-	virtual float get_priority() const override {
-		return -1.0; // Set lower than resource_importer_texture
-	}
+	virtual float get_priority() const override;
 
 	void update_imports();
 

@@ -1153,6 +1153,9 @@
 		<member name="editor/import/use_multiple_threads" type="bool" setter="" getter="" default="true">
 			If [code]true[/code] importing of resources is run on multiple threads.
 		</member>
+		<member name="editor/import/use_streamed_textures_by_default" type="bool" setter="" getter="" default="false">
+			If [code]true[/code], newly added image files are imported as [StreamedTexture2D] (the "Texture2D Streamed" importer) instead of [CompressedTexture2D]. Files that already have an [code].import[/code] file keep their current importer; change it in the Import dock and reimport to convert them.
+		</member>
 		<member name="editor/movie_writer/audio_bit_depth" type="int" setter="" getter="" default="16">
 			Number of bits per audio sample written to the [code].avi[/code] file. Only 16 and 32-bit are supported.
 		</member>
