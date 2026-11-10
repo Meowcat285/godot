@@ -1012,6 +1012,9 @@ bool EditorFileSystem::_update_scan_actions() {
 						ia.dir->files[idx]->import_md5 = FileAccess::get_md5(full_path + ".import");
 					}
 					ia.dir->files[idx]->import_dest_paths = _get_import_dest_paths(full_path);
+					// Files without a file cache entry never had their dependencies read (an import artifact store can
+					// report imports as valid without one), and they're needed by the export.
+					ia.dir->files[idx]->deps = _get_dependencies(full_path);
 				}
 
 				fs_changed = true;
