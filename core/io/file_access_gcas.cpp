@@ -887,10 +887,13 @@ uint32_t FileAccessGCAS::_count_parallel_chunks(int64_t p_first, uint64_t p_leng
 	}
 	uint64_t start = chunks[p_first].start;
 	uint32_t count = 0;
+	uint64_t compressed_total = 0;
 	for (uint32_t i = uint32_t(p_first); i < chunks.size() && count < PARALLEL_MAX_CHUNKS; i++) {
 		const Chunk &c = chunks[i];
 		uint64_t end = c.start + c.location.size;
-		if (c.location.codec != GCAS_CHUNK_CODEC_ZSTD || end - start > p_length || end - start > PARALLEL_MAX_BYTES) {
+		compressed_total += c.location.compressed_size; // At most 64 * 4 GiB, can't overflow.
+		// The compressed size isn't bounded by the index, check it too as it sizes the read buffer.
+		if (c.location.codec != GCAS_CHUNK_CODEC_ZSTD || end - start > p_length || end - start > PARALLEL_MAX_BYTES || compressed_total > PARALLEL_MAX_BYTES) {
 			break;
 		}
 		count++;
