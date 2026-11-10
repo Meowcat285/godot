@@ -142,6 +142,7 @@ struct GCASIOStats {
 	static inline SafeNumeric<uint64_t> bytes_decompressed{ 0 };
 	static inline SafeNumeric<uint64_t> decompress_usec{ 0 };
 	static inline SafeNumeric<uint64_t> read_usec{ 0 }; // Time spent seeking and reading chunks from pack files.
+	static inline SafeNumeric<uint64_t> parallel_chunks{ 0 }; // Chunks decompressed on the worker thread pool.
 };
 
 // Decompressed chunks, shared by all open GCAS files.
@@ -283,6 +284,8 @@ private:
 	Ref<FileAccess> _get_pack_handle(uint32_t p_pack_file) const;
 	bool _read_chunk_data(const Chunk &p_chunk, uint8_t *r_dst) const;
 	bool _get_chunk(int64_t p_chunk, Vector<uint8_t> &r_data, bool p_store_in_cache) const;
+	uint32_t _count_parallel_chunks(int64_t p_first, uint64_t p_length) const;
+	bool _read_chunks_parallel(int64_t p_first, uint32_t p_count, uint8_t *r_dst) const;
 
 	virtual Error open_internal(const String &p_path, int p_mode_flags) override { return ERR_UNAVAILABLE; }
 	virtual uint64_t _get_modified_time(const String &p_file) override { return 0; }

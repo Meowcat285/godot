@@ -44,6 +44,7 @@ enum Monitor {
 	MONITOR_BYTES_DECOMPRESSED,
 	MONITOR_DECOMPRESS_TIME,
 	MONITOR_READ_TIME,
+	MONITOR_PARALLEL_CHUNKS,
 	MONITOR_CACHE_HITS,
 	MONITOR_CACHE_MISSES,
 	MONITOR_CACHE_USED,
@@ -63,6 +64,7 @@ const MonitorInfo monitors[MONITOR_MAX] = {
 	{ "GCAS/bytes_decompressed", Performance::MONITOR_TYPE_MEMORY },
 	{ "GCAS/decompress_time", Performance::MONITOR_TYPE_TIME },
 	{ "GCAS/read_time", Performance::MONITOR_TYPE_TIME },
+	{ "GCAS/parallel_chunks", Performance::MONITOR_TYPE_QUANTITY },
 	{ "GCAS/cache_hits", Performance::MONITOR_TYPE_QUANTITY },
 	{ "GCAS/cache_misses", Performance::MONITOR_TYPE_QUANTITY },
 	{ "GCAS/cache_used", Performance::MONITOR_TYPE_MEMORY },
@@ -84,6 +86,8 @@ Variant get_monitor(int p_monitor) {
 			return GCASIOStats::decompress_usec.get() / 1000000.0; // Time monitors are in seconds.
 		case MONITOR_READ_TIME:
 			return GCASIOStats::read_usec.get() / 1000000.0;
+		case MONITOR_PARALLEL_CHUNKS:
+			return GCASIOStats::parallel_chunks.get();
 		default:
 			break;
 	}
