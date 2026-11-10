@@ -279,11 +279,6 @@ public:
 	static WorkerThreadPool *get_named_pool(const StringName &p_name);
 
 	static WorkerThreadPool *get_singleton() { return singleton; }
-	// New tasks block from here until the pool finishes.
-	bool is_exiting() {
-		MutexLock lock(task_mutex);
-		return runlevel != RUNLEVEL_NORMAL;
-	}
 	int get_thread_index() const;
 	TaskID get_caller_task_id() const;
 	GroupID get_caller_group_id() const;

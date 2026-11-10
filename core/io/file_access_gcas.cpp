@@ -874,15 +874,21 @@ bool FileAccessGCAS::_get_chunk(int64_t p_chunk, Vector<uint8_t> &r_data, bool p
 	return true;
 }
 
+// Decompression runs on its own pool, so readers on the main pool (e.g. threaded resource loading) can wait for it
+// without taking the threads it needs. Its tasks never wait, and it isn't stopped until the main pool is destroyed.
+static WorkerThreadPool *_get_decompress_pool() {
+	static BinaryMutex mutex;
+	if (!WorkerThreadPool::get_singleton()) {
+		return nullptr; // Not initialized yet (e.g. when reading project settings), or destroyed.
+	}
+	MutexLock lock(mutex); // get_named_pool() isn't thread-safe.
+	return WorkerThreadPool::get_named_pool(SNAME("GCAS"));
+}
+
 uint32_t FileAccessGCAS::_count_parallel_chunks(int64_t p_first, uint64_t p_length) const {
 #ifdef THREADS_ENABLED
-	WorkerThreadPool *pool = WorkerThreadPool::get_singleton();
-	if (!pool || pool->get_thread_count() < 2 || pool->is_exiting()) {
-		return 0; // Not initialized yet (e.g. when reading project settings), single-threaded, or shutting down.
-	}
-	if (pool->get_thread_index() != -1) {
-		// Waiting for a group from a pool thread could deadlock if every pool thread does it. Reads from pool threads
-		// (e.g. threaded resource loading) are already parallel across files.
+	WorkerThreadPool *pool = _get_decompress_pool();
+	if (!pool || pool->get_thread_count() < 2) {
 		return 0;
 	}
 	uint64_t start = chunks[p_first].start;
@@ -955,14 +961,17 @@ bool FileAccessGCAS::_read_chunks_parallel(int64_t p_first, uint32_t p_count, ui
 
 	// Wall time, so the monitor shows the speedup.
 	uint64_t decompress_start = OS::get_singleton()->get_ticks_usec();
-	WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_native_group_task(&decompress_job, jobs.ptr(), p_count, -1, true, "GCAS decompression");
-	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	WorkerThreadPool *pool = _get_decompress_pool();
+	ERR_FAIL_NULL_V(pool, false);
+	WorkerThreadPool::GroupID group = pool->add_native_group_task(&decompress_job, jobs.ptr(), p_count, -1, true, "GCAS decompression");
+	pool->wait_for_group_task_completion(group);
 	GCASIOStats::decompress_usec.add(OS::get_singleton()->get_ticks_usec() - decompress_start);
 
 	for (const DecompressJob &job : jobs) {
 		ERR_FAIL_COND_V_MSG(!job.ok, false, vformat("Corrupted GCAS chunk in \"%s\".", path));
 		GCASIOStats::bytes_decompressed.add(job.dst_size);
 	}
+	GCASIOStats::parallel_chunks.add(p_count);
 	return true;
 }
 

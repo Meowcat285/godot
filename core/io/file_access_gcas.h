@@ -142,6 +142,7 @@ struct GCASIOStats {
 	static inline SafeNumeric<uint64_t> bytes_decompressed{ 0 };
 	static inline SafeNumeric<uint64_t> decompress_usec{ 0 };
 	static inline SafeNumeric<uint64_t> read_usec{ 0 }; // Time spent seeking and reading chunks from pack files.
+	static inline SafeNumeric<uint64_t> parallel_chunks{ 0 }; // Chunks decompressed on the worker thread pool.
 };
 
 // Decompressed chunks, shared by all open GCAS files.
