@@ -877,8 +877,8 @@ bool FileAccessGCAS::_get_chunk(int64_t p_chunk, Vector<uint8_t> &r_data, bool p
 uint32_t FileAccessGCAS::_count_parallel_chunks(int64_t p_first, uint64_t p_length) const {
 #ifdef THREADS_ENABLED
 	WorkerThreadPool *pool = WorkerThreadPool::get_singleton();
-	if (!pool || pool->get_thread_count() < 2) {
-		return 0; // Not initialized yet (e.g. when reading project settings) or single-threaded.
+	if (!pool || pool->get_thread_count() < 2 || pool->is_exiting()) {
+		return 0; // Not initialized yet (e.g. when reading project settings), single-threaded, or shutting down.
 	}
 	if (pool->get_thread_index() != -1) {
 		// Waiting for a group from a pool thread could deadlock if every pool thread does it. Reads from pool threads
