@@ -33,6 +33,7 @@
 #include "core/config/project_settings.h"
 #include "core/io/compression.h"
 #include "core/io/file_access_patched.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/version.h"
 
@@ -133,6 +134,24 @@ struct IndexReader {
 };
 
 constexpr uint64_t RAW_DIRECT_READ_MIN = 16384;
+
+// Reads covering several whole compressed chunks are decompressed in parallel, in batches of at most this many bytes.
+constexpr uint32_t PARALLEL_MIN_CHUNKS = 2;
+constexpr uint32_t PARALLEL_MAX_CHUNKS = 64;
+constexpr uint64_t PARALLEL_MAX_BYTES = 16 * 1024 * 1024;
+
+struct DecompressJob {
+	const uint8_t *src = nullptr;
+	uint8_t *dst = nullptr;
+	uint32_t src_size = 0;
+	uint32_t dst_size = 0;
+	bool ok = false;
+};
+
+void decompress_job(void *p_userdata, uint32_t p_index) {
+	DecompressJob &job = static_cast<DecompressJob *>(p_userdata)[p_index];
+	job.ok = Compression::decompress(job.dst, job.dst_size, job.src, job.src_size, Compression::MODE_ZSTD) == int64_t(job.dst_size);
+}
 
 } // namespace
 
@@ -855,6 +874,95 @@ bool FileAccessGCAS::_get_chunk(int64_t p_chunk, Vector<uint8_t> &r_data, bool p
 	return true;
 }
 
+uint32_t FileAccessGCAS::_count_parallel_chunks(int64_t p_first, uint64_t p_length) const {
+#ifdef THREADS_ENABLED
+	WorkerThreadPool *pool = WorkerThreadPool::get_singleton();
+	if (!pool || pool->get_thread_count() < 2) {
+		return 0; // Not initialized yet (e.g. when reading project settings) or single-threaded.
+	}
+	if (pool->get_thread_index() != -1) {
+		// Waiting for a group from a pool thread could deadlock if every pool thread does it. Reads from pool threads
+		// (e.g. threaded resource loading) are already parallel across files.
+		return 0;
+	}
+	uint64_t start = chunks[p_first].start;
+	uint32_t count = 0;
+	for (uint32_t i = uint32_t(p_first); i < chunks.size() && count < PARALLEL_MAX_CHUNKS; i++) {
+		const Chunk &c = chunks[i];
+		uint64_t end = c.start + c.location.size;
+		if (c.location.codec != GCAS_CHUNK_CODEC_ZSTD || end - start > p_length || end - start > PARALLEL_MAX_BYTES) {
+			break;
+		}
+		count++;
+	}
+	return count >= PARALLEL_MIN_CHUNKS ? count : 0;
+#else
+	return 0;
+#endif
+}
+
+bool FileAccessGCAS::_read_chunks_parallel(int64_t p_first, uint32_t p_count, uint8_t *r_dst) const {
+	// Read the compressed data, merging chunks stored next to each other into one read.
+	uint64_t compressed_total = 0;
+	for (uint32_t i = 0; i < p_count; i++) {
+		compressed_total += chunks[p_first + i].location.compressed_size;
+	}
+	LocalVector<uint8_t> compressed;
+	compressed.resize(uint32_t(compressed_total)); // At most PARALLEL_MAX_BYTES.
+
+	LocalVector<DecompressJob> jobs;
+	jobs.resize(p_count);
+	uint64_t src_offset = 0;
+	uint64_t span_src_offset = 0;
+	uint32_t span_first = 0;
+	for (uint32_t i = 0; i < p_count; i++) {
+		const PackedSourceGCAS::ChunkLocation &loc = chunks[p_first + i].location;
+		DecompressJob &job = jobs[i];
+		job.src = compressed.ptr() + src_offset;
+		job.src_size = loc.compressed_size;
+		job.dst = r_dst + (chunks[p_first + i].start - chunks[p_first].start);
+		job.dst_size = loc.size;
+		src_offset += loc.compressed_size;
+
+		bool span_ends = i + 1 == p_count;
+		if (!span_ends) {
+			const PackedSourceGCAS::ChunkLocation &next = chunks[p_first + i + 1].location;
+			span_ends = next.pack_file != loc.pack_file || next.offset != loc.offset + loc.compressed_size;
+		}
+		if (!span_ends) {
+			continue;
+		}
+
+		const PackedSourceGCAS::ChunkLocation &first = chunks[p_first + span_first].location;
+		uint64_t span_size = (loc.offset + loc.compressed_size) - first.offset;
+		Ref<FileAccess> f = _get_pack_handle(first.pack_file);
+		if (f.is_null()) {
+			return false;
+		}
+		GCASIOStats::reads.increment();
+		GCASIOStats::bytes_read.add(span_size);
+		uint64_t read_start = OS::get_singleton()->get_ticks_usec();
+		f->seek(first.offset);
+		uint64_t read = f->get_buffer(compressed.ptr() + span_src_offset, span_size);
+		GCASIOStats::read_usec.add(OS::get_singleton()->get_ticks_usec() - read_start);
+		ERR_FAIL_COND_V_MSG(read != span_size, false, vformat("Truncated GCAS chunk in \"%s\".", path));
+		span_first = i + 1;
+		span_src_offset = src_offset;
+	}
+
+	// Wall time, so the monitor shows the speedup.
+	uint64_t decompress_start = OS::get_singleton()->get_ticks_usec();
+	WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_native_group_task(&decompress_job, jobs.ptr(), p_count, -1, true, "GCAS decompression");
+	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	GCASIOStats::decompress_usec.add(OS::get_singleton()->get_ticks_usec() - decompress_start);
+
+	for (const DecompressJob &job : jobs) {
+		ERR_FAIL_COND_V_MSG(!job.ok, false, vformat("Corrupted GCAS chunk in \"%s\".", path));
+		GCASIOStats::bytes_decompressed.add(job.dst_size);
+	}
+	return true;
+}
+
 void FileAccessGCAS::seek(uint64_t p_position) {
 	ERR_FAIL_COND_MSG(!open, "File must be opened before use.");
 	eof = p_position > size;
@@ -891,6 +999,14 @@ uint64_t FileAccessGCAS::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
 
 		if (ci == current_chunk) {
 			memcpy(p_dst + done, current_data.ptr() + in_chunk, n);
+		} else if (uint32_t parallel = (n == c.location.size) ? _count_parallel_chunks(ci, to_read - done) : 0) {
+			// Several whole chunks (e.g. a large resource read at once).
+			if (!_read_chunks_parallel(ci, parallel, p_dst + done)) {
+				eof = true;
+				break;
+			}
+			const Chunk &last = chunks[ci + parallel - 1];
+			n = last.start + last.location.size - c.start;
 		} else if (n == c.location.size) {
 			// Whole chunk, decompress straight into the destination (e.g. a full mip of a streamed texture).
 			Vector<uint8_t> cached;
