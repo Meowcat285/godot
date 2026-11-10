@@ -39,6 +39,8 @@ jobs:
           KEEP_LATEST: ${{ inputs.keep-latest }}
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
+          # Without a shell set, steps don't run with pipefail: a failed `gh api` below must stop the step.
+          set -o pipefail
           if ! [[ "${DAYS}" =~ ^[0-9]+$ ]]; then
             echo "::error::days must be a whole number, got '${DAYS}'."
             exit 1
