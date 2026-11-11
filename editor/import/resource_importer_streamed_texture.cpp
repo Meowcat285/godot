@@ -30,6 +30,7 @@
 
 #include "resource_importer_streamed_texture.h"
 
+#include "core/config/project_settings.h"
 #include "core/io/config_file.h"
 #include "core/io/image_loader.h"
 #include "editor/file_system/editor_file_system.h"
@@ -74,6 +75,11 @@ String ResourceImporterStreamedTexture::get_visible_name() const {
 }
 void ResourceImporterStreamedTexture::get_recognized_extensions(List<String> *p_extensions) const {
 	ImageLoader::get_recognized_extensions(p_extensions);
+}
+
+float ResourceImporterStreamedTexture::get_priority() const {
+	// Lower than resource_importer_texture, unless the project opts in to streamed textures by default.
+	return GLOBAL_GET("editor/import/use_streamed_textures_by_default") ? 2.0 : -1.0;
 }
 
 String ResourceImporterStreamedTexture::get_save_extension() const {
