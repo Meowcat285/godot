@@ -42,6 +42,7 @@
 #include "editor/scene/3d/node_3d_editor_viewport.h"
 #include "editor/themes/editor_scale.h"
 #include "scene/3d/lightmap_gi.h"
+#include "scene/3d/lightmap_gi_streaming.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/label.h"
@@ -462,7 +463,13 @@ void LightmapGIEditorPlugin::_bind_methods() {
 	ClassDB::bind_method("_bake", &LightmapGIEditorPlugin::_bake);
 }
 
+static Camera3D *_get_lightmap_streaming_camera() {
+	Node3DEditorViewport *viewport = Node3DEditor::get_singleton() ? Node3DEditor::get_singleton()->get_last_used_viewport() : nullptr;
+	return viewport ? viewport->get_camera_3d() : nullptr;
+}
+
 LightmapGIEditorPlugin::LightmapGIEditorPlugin() {
+	LightmapStreamer::editor_camera_func = &_get_lightmap_streaming_camera;
 	bake = memnew(Button);
 	bake->set_theme_type_variation(SceneStringName(FlatButton));
 	// TODO: Rework this as a dedicated toolbar control so we can hook into theme changes and update it

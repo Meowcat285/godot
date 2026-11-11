@@ -93,6 +93,16 @@
 			The strength of the lightmap's approximated specular lobe. This helps make lightmapped scenes look closer to real-time lighting, which is particularly noticeable for lights that use the [constant Light3D.BAKE_STATIC] bake mode. Only effective if [member directional] is [code]true[/code].
 			[b]Note:[/b] The lightmap is only able to represent one light direction per texel, which means that the specular direction may appear to be incorrect in certain cases. This can manifest as specular lobes appearing to warp around as the camera moves.
 		</member>
+		<member name="streaming_enabled" type="bool" setter="set_streaming_enabled" getter="is_streaming_enabled" default="false">
+			If [code]true[/code], lightmaps are baked into a [LightmapStreamData] file instead of atlas textures. At runtime, each baked instance's lightmap is loaded at a resolution that depends on its distance to the camera, into a pool texture of a fixed size (see [member streaming_pool_size] and [member streaming_pool_slices]). This bounds the video memory used by lightmaps, regardless of how many instances are baked. Requires rebaking.
+			[b]Note:[/b] Streamed lightmaps don't support [member shadowmask_mode]. They require the Forward+ or Mobile renderer.
+		</member>
+		<member name="streaming_pool_size" type="int" setter="set_streaming_pool_size" getter="get_streaming_pool_size" default="2048">
+			The width and height of each slice of the streaming pool texture, in texels. An instance's lightmap is never streamed in at a resolution larger than this. Only used if the lightmap was baked with [member streaming_enabled].
+		</member>
+		<member name="streaming_pool_slices" type="int" setter="set_streaming_pool_slices" getter="get_streaming_pool_slices" default="2">
+			The number of slices in the streaming pool texture. Video memory used by streamed lightmaps is [code]streaming_pool_size * streaming_pool_size * streaming_pool_slices[/code] texels per lightmap layer (1 byte per texel and layer when BC6H is supported). Spherical Gaussian lightmaps use 14 layers, directional lightmaps 4 and non-directional lightmaps 1. Only used if the lightmap was baked with [member streaming_enabled].
+		</member>
 		<member name="supersampling" type="bool" setter="set_supersampling_enabled" getter="is_supersampling_enabled" default="false">
 			If [code]true[/code], lightmaps are baked with the texel scale multiplied with [member supersampling_factor] and downsampled before saving the lightmap (so the effective texel density is identical to having supersampling disabled).
 			Supersampling provides increased lightmap quality with less noise, smoother shadows and better shadowing of small-scale features in objects. However, it may result in significantly increased bake times and memory usage while baking lightmaps. Padding is automatically adjusted to avoid increasing light leaking.

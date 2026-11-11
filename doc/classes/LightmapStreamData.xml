@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="LightmapStreamData" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Streamed lightmap data for [LightmapGI].
+	</brief_description>
+	<description>
+		[LightmapStreamData] refers to a [code].lmstream[/code] file baked by [LightmapGI] when [member LightmapGI.streaming_enabled] is [code]true[/code]. The file stores each baked instance's lightmap rectangle with its own mipmaps, compressed to BC6H. Only the file's index is kept in memory; mipmaps are read from the file as they are streamed in.
+	</description>
+	<tutorials>
+	</tutorials>
+</class>

@@ -37,6 +37,8 @@
 
 class CameraAttributes;
 class Light3D;
+class LightmapStreamData;
+class LightmapStreamer;
 class Mesh;
 class Sky;
 
@@ -89,6 +91,9 @@ private:
 
 	Dictionary probe_volume_data;
 
+	Ref<LightmapStreamData> stream_data;
+	RID streamed_texture;
+
 	void _reset_lightmap_textures();
 	void _reset_shadowmask_textures();
 
@@ -123,6 +128,11 @@ public:
 
 	void _set_probe_volume_data(const Dictionary &p_data);
 	Dictionary _get_probe_volume_data() const;
+
+	void set_stream_data(const Ref<LightmapStreamData> &p_stream_data);
+	Ref<LightmapStreamData> get_stream_data() const;
+	void _set_streamed_texture(RID p_texture);
+	RID _get_streamed_texture() const;
 
 	void update_shadowmask_mode(ShadowmaskMode p_mode);
 	ShadowmaskMode get_shadowmask_mode() const;
@@ -225,6 +235,10 @@ private:
 	bool probe_volume_enabled = false;
 	float probe_volume_spacing = 1.0;
 	int probe_volume_subdivisions = 3;
+	bool streaming_enabled = false;
+	int streaming_pool_size = 2048;
+	int streaming_pool_slices = 2;
+	LightmapStreamer *streamer = nullptr;
 
 	Ref<LightmapGIData> light_data;
 	Node *last_owner = nullptr;
@@ -252,6 +266,8 @@ private:
 
 	void _assign_lightmaps();
 	void _clear_lightmaps();
+	void _update_streaming();
+	void _restart_streaming();
 
 	struct BSPSimplex {
 		int vertices[4] = {};
@@ -381,6 +397,15 @@ public:
 	void set_probe_volume_subdivisions(int p_subdivisions);
 	int get_probe_volume_subdivisions() const;
 
+	void set_streaming_enabled(bool p_enable);
+	bool is_streaming_enabled() const;
+
+	void set_streaming_pool_size(int p_size);
+	int get_streaming_pool_size() const;
+
+	void set_streaming_pool_slices(int p_slices);
+	int get_streaming_pool_slices() const;
+
 	AABB get_aabb() const override;
 
 	BakeError bake(Node *p_from_node, String p_image_data_path = "", Lightmapper::BakeStepFunc p_bake_step = nullptr, void *p_bake_userdata = nullptr);
@@ -388,6 +413,7 @@ public:
 	virtual PackedStringArray get_configuration_warnings() const override;
 
 	LightmapGI();
+	~LightmapGI();
 };
 
 VARIANT_ENUM_CAST(LightmapGIData::ShadowmaskMode);

@@ -4,6 +4,9 @@ Compares Spherical Gaussian (SG) lightmaps with L1 spherical harmonics lightmaps
 
 - `sg.tscn`: directional lightmap with `use_spherical_gaussians` enabled.
 - `sh.tscn`: regular directional lightmap, with the old `specular_intensity` approximation set to 1.0.
+- `sg_streamed.tscn`: the same as `sg.tscn`, with `streaming_enabled`: each mesh's lightmap is streamed into a
+  fixed-size pool at a resolution that depends on its distance to the camera. Bake it with
+  `godot --editor --path . -- --auto-bake=res://sg_streamed.tscn`.
 
 Both scenes instance `room.tscn`: a room lit by a warm omni light, a cool spot light and a sun through an
 opening, with metallic (front) and dielectric (back) spheres from smooth (left) to rough (right). All lights

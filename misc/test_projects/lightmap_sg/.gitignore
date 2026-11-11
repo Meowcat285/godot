@@ -2,3 +2,4 @@
 *.lmbake
 *.exr
 *.exr.import
+*.lmstream

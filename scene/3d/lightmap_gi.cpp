@@ -41,11 +41,14 @@
 #include "core/object/object.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/lightmap_probe.h"
+#include "scene/3d/camera_3d.h"
+#include "scene/3d/lightmap_gi_streaming.h"
 #include "scene/3d/lightmap_probe_volume_builder.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/resources/camera_attributes.h"
 #include "scene/resources/environment.h"
 #include "scene/resources/image_texture.h"
+#include "scene/main/viewport.h"
 #include "scene/resources/sky.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -203,7 +206,11 @@ void LightmapGIData::clear() {
 }
 
 void LightmapGIData::_reset_lightmap_textures() {
-	RS::get_singleton()->lightmap_set_textures(lightmap, combined_light_texture.is_valid() ? combined_light_texture->get_rid() : RID(), uses_spherical_harmonics);
+	RID texture = combined_light_texture.is_valid() ? combined_light_texture->get_rid() : RID();
+	if (streamed_texture.is_valid()) {
+		texture = streamed_texture;
+	}
+	RS::get_singleton()->lightmap_set_textures(lightmap, texture, uses_spherical_harmonics);
 	RS::get_singleton()->lightmap_set_uses_spherical_gaussians(lightmap, _uses_spherical_gaussians);
 }
 
@@ -252,6 +259,23 @@ void LightmapGIData::_set_probe_volume_data(const Dictionary &p_data) {
 
 Dictionary LightmapGIData::_get_probe_volume_data() const {
 	return probe_volume_data;
+}
+
+void LightmapGIData::set_stream_data(const Ref<LightmapStreamData> &p_stream_data) {
+	stream_data = p_stream_data;
+}
+
+Ref<LightmapStreamData> LightmapGIData::get_stream_data() const {
+	return stream_data;
+}
+
+void LightmapGIData::_set_streamed_texture(RID p_texture) {
+	streamed_texture = p_texture;
+	_reset_lightmap_textures();
+}
+
+RID LightmapGIData::_get_streamed_texture() const {
+	return streamed_texture;
 }
 
 void LightmapGIData::update_shadowmask_mode(ShadowmaskMode p_mode) {
@@ -406,6 +430,10 @@ void LightmapGIData::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_packed_directional", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_packed_directional", "_is_using_packed_directional");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_spherical_gaussians", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_spherical_gaussians", "_is_using_spherical_gaussians");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "_probe_volume_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_probe_volume_data", "_get_probe_volume_data");
+
+	ClassDB::bind_method(D_METHOD("set_stream_data", "stream_data"), &LightmapGIData::set_stream_data);
+	ClassDB::bind_method(D_METHOD("get_stream_data"), &LightmapGIData::get_stream_data);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "stream_data", PROPERTY_HINT_RESOURCE_TYPE, LightmapStreamData::get_class_static(), PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY), "set_stream_data", "get_stream_data");
 
 #ifndef DISABLE_DEPRECATED
 	ClassDB::bind_method(D_METHOD("set_light_texture", "light_texture"), &LightmapGIData::set_light_texture);
@@ -1554,15 +1582,51 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 
 	const String texture_filename = p_image_data_path.get_basename();
 	const int shadowmask_texture_count = lightmapper->get_shadowmask_texture_count();
-	const bool save_shadowmask = shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && shadowmask_texture_count > 0;
+	// Streamed lightmaps don't support shadowmasks: they would need their own rectangles in the pool.
+	const bool save_shadowmask = !streaming_enabled && shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && shadowmask_texture_count > 0;
 
-	// Save the lightmap atlases.
-	BakeError save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename, lightmap_textures, false);
-	ERR_FAIL_COND_V(save_err != BAKE_ERROR_OK, save_err);
+	Ref<LightmapStreamData> stream_data;
+	if (streaming_enabled) {
+		// Save each instance's rectangle with its own mips instead of the atlases.
+		const int layer_count = directional ? (use_spherical_gaussians ? 14 : 4) : 1;
+		Vector<Ref<Image>> bake_layers;
+		for (int i = 0; i < lightmapper->get_bake_texture_count(); i++) {
+			bake_layers.push_back(lightmapper->get_bake_texture(i));
+		}
+		ERR_FAIL_COND_V(lightmapper->get_bake_mesh_count() != mesh_data.size(), BAKE_ERROR_CANT_CREATE_IMAGE);
+		Vector<LightmapStreamData::BuildUser> stream_users;
+		for (int i = 0; i < lightmapper->get_bake_mesh_count(); i++) {
+			LightmapStreamData::BuildUser user;
+			user.uv_scale = lightmapper->get_bake_mesh_uv_scale(i);
+			user.slice = lightmapper->get_bake_mesh_texture_slice(i);
+			const Vector<Vector3> &points = mesh_data[i].points;
+			for (int j = 0; j + 2 < points.size(); j += 3) {
+				user.world_area += (points[j + 1] - points[j]).cross(points[j + 2] - points[j]).length() * 0.5f;
+			}
+			for (int j = 0; j < points.size(); j++) {
+				if (j == 0) {
+					user.world_aabb = AABB(points[j], Vector3());
+				} else {
+					user.world_aabb.expand_to(points[j]);
+				}
+			}
+			stream_users.push_back(user);
+		}
+
+		const String stream_path = texture_filename + ".lmstream";
+		const Error stream_err = LightmapStreamData::build_and_save(stream_path, bake_layers, layer_count, stream_users, supersampling_enabled ? supersampling_factor : 1.0f);
+		ERR_FAIL_COND_V(stream_err != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
+		stream_data = ResourceLoader::load(stream_path, "", ResourceFormatLoader::CACHE_MODE_REPLACE);
+		ERR_FAIL_COND_V(stream_data.is_null(), BAKE_ERROR_CANT_CREATE_IMAGE);
+	} else {
+		// Save the lightmap atlases.
+		BakeError save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename, lightmap_textures, false);
+		ERR_FAIL_COND_V(save_err != BAKE_ERROR_OK, save_err);
+	}
 
 	if (save_shadowmask) {
 		// Save the shadowmask atlases.
-		save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename + "_shadow", shadowmask_textures, true);
+		BakeError save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename + "_shadow", shadowmask_textures, true);
 		ERR_FAIL_COND_V(save_err != BAKE_ERROR_OK, save_err);
 	}
 
@@ -1579,6 +1643,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 	}
 
 	gi_data->set_lightmap_textures(lightmap_textures);
+	gi_data->set_stream_data(stream_data);
 
 	if (save_shadowmask) {
 		gi_data->set_shadowmask_textures(shadowmask_textures);
@@ -1802,11 +1867,43 @@ void LightmapGI::_notification(int p_what) {
 				_clear_lightmaps();
 			}
 		} break;
+
+		case NOTIFICATION_INTERNAL_PROCESS: {
+			_update_streaming();
+		} break;
+	}
+}
+
+void LightmapGI::_update_streaming() {
+	if (!streamer || light_data.is_null()) {
+		return;
+	}
+	Camera3D *camera = nullptr;
+	if (Engine::get_singleton()->is_editor_hint() && LightmapStreamer::editor_camera_func) {
+		camera = LightmapStreamer::editor_camera_func();
+	} else if (get_viewport()) {
+		camera = get_viewport()->get_camera_3d();
+	}
+	streamer->update(camera);
+	if (light_data->_get_streamed_texture() != streamer->get_pool_texture()) {
+		light_data->_set_streamed_texture(streamer->get_pool_texture());
+	}
+}
+
+void LightmapGI::_restart_streaming() {
+	if (streamer && is_inside_tree() && light_data.is_valid()) {
+		_clear_lightmaps();
+		_assign_lightmaps();
 	}
 }
 
 void LightmapGI::_assign_lightmaps() {
 	ERR_FAIL_COND(light_data.is_null());
+
+	if (light_data->get_stream_data().is_valid()) {
+		streamer = memnew(LightmapStreamer);
+		streamer->setup(light_data->get_stream_data(), get_instance(), streaming_pool_size, streaming_pool_slices);
+	}
 
 	Vector<String> missing_node_paths;
 
@@ -1818,7 +1915,11 @@ void LightmapGI::_assign_lightmaps() {
 			continue;
 		}
 		int instance_idx = light_data->get_user_sub_instance(i);
-		if (instance_idx >= 0) {
+		if (streamer) {
+			// The streamer points the instance at its rectangle in the pool once it's loaded.
+			ERR_CONTINUE(instance_idx < 0 && !Object::cast_to<VisualInstance3D>(node));
+			streamer->add_instance(node->get_instance_id(), instance_idx, i);
+		} else if (instance_idx >= 0) {
 			RID instance_id = node->call("get_bake_mesh_instance", instance_idx);
 			if (instance_id.is_valid()) {
 				RS::get_singleton()->instance_geometry_set_lightmap(instance_id, get_instance(), light_data->get_user_lightmap_uv_scale(i), light_data->get_user_lightmap_slice_index(i));
@@ -1838,6 +1939,11 @@ void LightmapGI::_assign_lightmaps() {
 			missing_paths_text = vformat("%s and %d more", String(", ").join(missing_node_paths.slice(0, 3)), missing_node_paths.size() - 3);
 		}
 		WARN_PRINT(vformat("%s couldn't find previously baked nodes and needs a rebake (missing nodes: %s).", get_name(), missing_paths_text));
+	}
+
+	if (streamer) {
+		set_process_internal(true);
+		_update_streaming();
 	}
 }
 
@@ -1859,6 +1965,13 @@ void LightmapGI::_clear_lightmaps() {
 			ERR_CONTINUE(!vi);
 			RS::get_singleton()->instance_geometry_set_lightmap(vi->get_instance(), RID(), Rect2(), 0);
 		}
+	}
+
+	if (streamer) {
+		set_process_internal(false);
+		light_data->_set_streamed_texture(RID());
+		memdelete(streamer);
+		streamer = nullptr;
 	}
 }
 
@@ -2116,6 +2229,33 @@ int LightmapGI::get_probe_volume_subdivisions() const {
 	return probe_volume_subdivisions;
 }
 
+void LightmapGI::set_streaming_enabled(bool p_enable) {
+	streaming_enabled = p_enable;
+	update_configuration_warnings();
+}
+
+bool LightmapGI::is_streaming_enabled() const {
+	return streaming_enabled;
+}
+
+void LightmapGI::set_streaming_pool_size(int p_size) {
+	streaming_pool_size = CLAMP(int(Math::next_power_of_2(uint32_t(MAX(p_size, 1)))), 256, 16384);
+	_restart_streaming();
+}
+
+int LightmapGI::get_streaming_pool_size() const {
+	return streaming_pool_size;
+}
+
+void LightmapGI::set_streaming_pool_slices(int p_slices) {
+	streaming_pool_slices = CLAMP(p_slices, 1, 64);
+	_restart_streaming();
+}
+
+int LightmapGI::get_streaming_pool_slices() const {
+	return streaming_pool_slices;
+}
+
 void LightmapGI::set_specular_intensity(float p_strength) {
 	specular_intensity = p_strength;
 
@@ -2133,7 +2273,9 @@ PackedStringArray LightmapGI::get_configuration_warnings() const {
 		return warnings;
 	}
 
-	if (shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && light_data.is_valid() && !light_data->has_shadowmask_textures()) {
+	if (streaming_enabled && shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE) {
+		warnings.push_back(RTR("Streamed lightmaps don't support shadowmasks. The shadowmask won't be baked while Streaming is enabled."));
+	} else if (shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && light_data.is_valid() && !light_data->has_shadowmask_textures()) {
 		warnings.push_back(RTR("The lightmap has no baked shadowmask textures. Please rebake with the Shadowmask Mode set to anything other than None."));
 	}
 
@@ -2266,6 +2408,12 @@ void LightmapGI::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_probe_volume_spacing"), &LightmapGI::get_probe_volume_spacing);
 	ClassDB::bind_method(D_METHOD("set_probe_volume_subdivisions", "subdivisions"), &LightmapGI::set_probe_volume_subdivisions);
 	ClassDB::bind_method(D_METHOD("get_probe_volume_subdivisions"), &LightmapGI::get_probe_volume_subdivisions);
+	ClassDB::bind_method(D_METHOD("set_streaming_enabled", "enabled"), &LightmapGI::set_streaming_enabled);
+	ClassDB::bind_method(D_METHOD("is_streaming_enabled"), &LightmapGI::is_streaming_enabled);
+	ClassDB::bind_method(D_METHOD("set_streaming_pool_size", "size"), &LightmapGI::set_streaming_pool_size);
+	ClassDB::bind_method(D_METHOD("get_streaming_pool_size"), &LightmapGI::get_streaming_pool_size);
+	ClassDB::bind_method(D_METHOD("set_streaming_pool_slices", "slices"), &LightmapGI::set_streaming_pool_slices);
+	ClassDB::bind_method(D_METHOD("get_streaming_pool_slices"), &LightmapGI::get_streaming_pool_slices);
 
 	//	ClassDB::bind_method(D_METHOD("bake", "from_node"), &LightmapGI::bake, DEFVAL(Variant()));
 
@@ -2300,6 +2448,10 @@ void LightmapGI::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "probe_volume_enabled"), "set_probe_volume_enabled", "is_probe_volume_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "probe_volume_spacing", PROPERTY_HINT_RANGE, "0.05,16,0.01,or_greater,suffix:m"), "set_probe_volume_spacing", "get_probe_volume_spacing");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "probe_volume_subdivisions", PROPERTY_HINT_RANGE, "1,4,1"), "set_probe_volume_subdivisions", "get_probe_volume_subdivisions");
+	ADD_GROUP("Streaming", "streaming_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "streaming_enabled"), "set_streaming_enabled", "is_streaming_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "streaming_pool_size", PROPERTY_HINT_ENUM, "256:256,512:512,1024:1024,2048:2048,4096:4096,8192:8192,16384:16384"), "set_streaming_pool_size", "get_streaming_pool_size");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "streaming_pool_slices", PROPERTY_HINT_RANGE, "1,64,1"), "set_streaming_pool_slices", "get_streaming_pool_slices");
 	ADD_GROUP("Data", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "light_data", PROPERTY_HINT_RESOURCE_TYPE, LightmapGIData::get_class_static()), "set_light_data", "get_light_data");
 
@@ -2335,4 +2487,10 @@ void LightmapGI::_bind_methods() {
 }
 
 LightmapGI::LightmapGI() {
+}
+
+LightmapGI::~LightmapGI() {
+	if (streamer) {
+		memdelete(streamer);
+	}
 }

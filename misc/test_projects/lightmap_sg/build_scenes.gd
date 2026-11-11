@@ -10,6 +10,7 @@ func _init() -> void:
 
 	_save(_build_variant(true), "res://sg.tscn")
 	_save(_build_variant(false), "res://sh.tscn")
+	_save(_build_variant(true, true), "res://sg_streamed.tscn")
 	_save(_build_probe_variant(true), "res://probes_volume.tscn")
 	_save(_build_probe_variant(false), "res://probes_classic.tscn")
 	quit()
@@ -172,9 +173,11 @@ func _build_room() -> Node3D:
 	return root
 
 
-func _build_variant(spherical_gaussians: bool) -> Node3D:
+func _build_variant(spherical_gaussians: bool, streaming := false) -> Node3D:
 	var root := Node3D.new()
 	root.name = "SG" if spherical_gaussians else "SH"
+	if streaming:
+		root.name += "Streamed"
 	root.set_script(load("res://viewer.gd"))
 
 	var room: Node3D = (load("res://room.tscn") as PackedScene).instantiate()
@@ -187,6 +190,7 @@ func _build_variant(spherical_gaussians: bool) -> Node3D:
 	lightmap.interior = true
 	lightmap.quality = LightmapGI.BAKE_QUALITY_HIGH
 	lightmap.texel_scale = 2.0
+	lightmap.streaming_enabled = streaming
 	if not spherical_gaussians:
 		# Show what the old approximation gives, for comparison.
 		lightmap.specular_intensity = 1.0

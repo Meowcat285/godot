@@ -251,6 +251,7 @@
 #include "scene/3d/label_3d.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/lightmap_gi.h"
+#include "scene/3d/lightmap_gi_streaming.h"
 #include "scene/3d/lightmap_probe.h"
 #include "scene/3d/limit_angular_velocity_modifier_3d.h"
 #include "scene/3d/line_base_3d.h"
@@ -386,6 +387,9 @@ static Ref<ResourceFormatLoaderText> resource_loader_text;
 
 static Ref<ResourceFormatLoaderCompressedTexture2D> resource_loader_compressed_texture;
 static Ref<ResourceFormatLoaderStreamedTexture2D> resource_loader_streamed_texture;
+#ifndef _3D_DISABLED
+static Ref<ResourceFormatLoaderLightmapStreamData> resource_loader_lightmap_stream;
+#endif
 static Ref<ResourceFormatLoaderCompressedTextureLayered> resource_loader_texture_layered;
 static Ref<ResourceFormatLoaderCompressedTexture3D> resource_loader_texture_3d;
 
@@ -413,6 +417,11 @@ void register_scene_types() {
 		resource_loader_streamed_texture.instantiate();
 		ResourceLoader::add_resource_format_loader(resource_loader_streamed_texture);
 	}
+
+#ifndef _3D_DISABLED
+	resource_loader_lightmap_stream.instantiate();
+	ResourceLoader::add_resource_format_loader(resource_loader_lightmap_stream);
+#endif
 
 	if constexpr (GD_IS_CLASS_ENABLED(TextureLayered)) {
 		resource_loader_texture_layered.instantiate();
@@ -676,6 +685,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(VoxelGIData);
 	GDREGISTER_CLASS(LightmapGI);
 	GDREGISTER_CLASS(LightmapGIData);
+	GDREGISTER_CLASS(LightmapStreamData);
 	GDREGISTER_CLASS(LightmapProbe);
 	GDREGISTER_ABSTRACT_CLASS(Lightmapper);
 
@@ -1375,6 +1385,11 @@ void unregister_scene_types() {
 		ResourceLoader::remove_resource_format_loader(resource_loader_streamed_texture);
 		resource_loader_streamed_texture.unref();
 	}
+
+#ifndef _3D_DISABLED
+	ResourceLoader::remove_resource_format_loader(resource_loader_lightmap_stream);
+	resource_loader_lightmap_stream.unref();
+#endif
 
 	ResourceSaver::remove_resource_format_saver(resource_saver_text);
 	resource_saver_text.unref();
