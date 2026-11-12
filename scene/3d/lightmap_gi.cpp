@@ -1633,7 +1633,10 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			old_stream_data->mark_stale();
 		}
 		Ref<DirAccess> dir = DirAccess::create_for_path(stream_path);
-		ERR_FAIL_COND_V(dir.is_null() || dir->rename(temp_path, stream_path) != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
+		if (dir.is_null() || dir->rename(temp_path, stream_path) != OK) {
+			DirAccess::remove_absolute(temp_path);
+			ERR_FAIL_V_MSG(BAKE_ERROR_CANT_CREATE_IMAGE, vformat("Can't replace \"%s\".", stream_path));
+		}
 		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its
 		// cache entry. Anything still holding the old resource keeps a consistent index.
 		stream_data.instantiate();
