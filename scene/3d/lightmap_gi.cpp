@@ -33,6 +33,7 @@
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/config_file.h"
+#include "core/io/dir_access.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/math/delaunay_3d.h"
@@ -1614,8 +1615,15 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 
 		const String stream_path = texture_filename + ".lmstream";
+		// Build into a temporary file, so a failed bake leaves the previous stream intact.
+		const String temp_path = stream_path + ".tmp";
+		const Error stream_err = LightmapStreamData::build_and_save(temp_path, bake_layers, layer_count, stream_users, supersampling_enabled ? supersampling_factor : 1.0f);
+		if (stream_err != OK) {
+			DirAccess::remove_absolute(temp_path);
+			ERR_FAIL_V(BAKE_ERROR_CANT_CREATE_IMAGE);
+		}
 		if (streamer) {
-			// Stop streaming from the file before it's rewritten.
+			// Stop streaming from the file before it's replaced.
 			_clear_lightmaps();
 		}
 		// Other LightmapGIs may still stream the old file. They keep the mips they have, but stop loading new ones
@@ -1624,8 +1632,8 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		if (old_stream_data.is_valid()) {
 			old_stream_data->mark_stale();
 		}
-		const Error stream_err = LightmapStreamData::build_and_save(stream_path, bake_layers, layer_count, stream_users, supersampling_enabled ? supersampling_factor : 1.0f);
-		ERR_FAIL_COND_V(stream_err != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
+		Ref<DirAccess> dir = DirAccess::create_for_path(stream_path);
+		ERR_FAIL_COND_V(dir.is_null() || dir->rename(temp_path, stream_path) != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
 		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its
 		// cache entry. Anything still holding the old resource keeps a consistent index.
 		stream_data.instantiate();

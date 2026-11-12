@@ -666,6 +666,10 @@ void LightmapStreamer::update(Camera3D *p_camera, const Transform3D &p_lightmap_
 	}
 
 	_finish_jobs(false);
+	if (data->is_stale()) {
+		// A rebake replaced the file. Keep what's resident until this streamer is reassigned.
+		return;
+	}
 
 	if (!p_camera || !p_camera->is_inside_tree() || !p_camera->get_viewport()) {
 		return;
