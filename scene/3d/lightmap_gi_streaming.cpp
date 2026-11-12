@@ -42,6 +42,9 @@
 
 static const uint8_t LIGHTMAP_STREAM_MAGIC[4] = { 'G', 'D', 'L', 'S' };
 
+// Rows of padded texels compressed at once (a multiple of the 4-texel BC6H block height).
+static constexpr int STRIP_HEIGHT = 1024;
+
 static int _align4(int p_value) {
 	return (p_value + 3) & ~3;
 }
@@ -147,36 +150,40 @@ Error LightmapStreamData::build_and_save(const String &p_path, const Vector<Ref<
 			const int iw = mip.image_width;
 			const int ih = mip.image_height;
 
-			// Layers are compressed one at a time, which keeps each image within Image::MAX_PIXELS.
+			// Each layer is compressed in strips of whole block rows. BC6H blocks are stored row by row, so the strips
+			// concatenate into the layer's data, and each image stays well within Image::MAX_PIXELS.
 			mip.offset = f->get_position();
 			for (int l = 0; l < p_layer_count; l++) {
-				Vector<uint8_t> padded;
-				padded.resize(int64_t(iw) * ih * 3 * sizeof(float));
-				float *dst = reinterpret_cast<float *>(padded.ptrw());
 				Ref<Image> &content = contents[l];
 				if (content->get_width() != cw || content->get_height() != ch) {
 					content->resize(cw, ch, Image::INTERPOLATE_BILINEAR);
 				}
 				const float *src = reinterpret_cast<const float *>(content->ptr());
-				for (int y = 0; y < ih; y++) {
-					const int sy = CLAMP(y - MIP_PADDING, 0, ch - 1);
-					for (int x = 0; x < iw; x++) {
-						const int sx = CLAMP(x - MIP_PADDING, 0, cw - 1);
-						const float *s = &src[(sy * cw + sx) * 3];
-						float *d = &dst[(int64_t(y) * iw + x) * 3];
-						d[0] = s[0];
-						d[1] = s[1];
-						d[2] = s[2];
+				for (int strip_y = 0; strip_y < ih; strip_y += STRIP_HEIGHT) {
+					const int sh = MIN(STRIP_HEIGHT, ih - strip_y); // ih is a multiple of 4, so sh is too.
+					Vector<uint8_t> padded;
+					padded.resize(int64_t(iw) * sh * 3 * sizeof(float));
+					float *dst = reinterpret_cast<float *>(padded.ptrw());
+					for (int y = 0; y < sh; y++) {
+						const int sy = CLAMP(strip_y + y - MIP_PADDING, 0, ch - 1);
+						for (int x = 0; x < iw; x++) {
+							const int sx = CLAMP(x - MIP_PADDING, 0, cw - 1);
+							const float *s = &src[(int64_t(sy) * cw + sx) * 3];
+							float *d = &dst[(int64_t(y) * iw + x) * 3];
+							d[0] = s[0];
+							d[1] = s[1];
+							d[2] = s[2];
+						}
 					}
-				}
 
-				Ref<Image> image = Image::create_from_data(iw, ih, false, Image::FORMAT_RGBF, padded);
-				image->convert(Image::FORMAT_RGBH);
-				Error err = image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_RGB);
-				ERR_FAIL_COND_V_MSG(err != OK || image->get_format() != Image::FORMAT_BPTC_RGBFU, ERR_CANT_CREATE, "Couldn't compress a streamed lightmap rectangle to BC6H.");
-				const Vector<uint8_t> compressed = image->get_data();
-				ERR_FAIL_COND_V(compressed.size() != int64_t(mip.layer_size), ERR_BUG);
-				f->store_buffer(compressed);
+					Ref<Image> image = Image::create_from_data(iw, sh, false, Image::FORMAT_RGBF, padded);
+					image->convert(Image::FORMAT_RGBH);
+					Error err = image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_RGB);
+					ERR_FAIL_COND_V_MSG(err != OK || image->get_format() != Image::FORMAT_BPTC_RGBFU, ERR_CANT_CREATE, "Couldn't compress a streamed lightmap rectangle to BC6H.");
+					const Vector<uint8_t> compressed = image->get_data();
+					ERR_FAIL_COND_V(compressed.size() != int64_t(iw) * sh, ERR_BUG);
+					f->store_buffer(compressed);
+				}
 			}
 		}
 	}
