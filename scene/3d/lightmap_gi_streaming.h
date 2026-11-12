@@ -36,8 +36,8 @@
 #include "core/io/resource_loader.h"
 #include "core/math/aabb.h"
 #include "core/object/worker_thread_pool.h"
-#include "core/templates/safe_refcount.h"
 #include "core/templates/local_vector.h"
+#include "core/templates/safe_refcount.h"
 
 class Camera3D;
 

@@ -82,24 +82,24 @@ Error LightmapStreamData::build_and_save(const String &p_path, const Vector<Ref<
 	crops.resize(p_users.size());
 	uint64_t table_size = 16;
 	for (int i = 0; i < p_users.size(); i++) {
-		const BuildUser &bu = p_users[i];
-		ERR_FAIL_INDEX_V(bu.slice, slice_count, ERR_INVALID_PARAMETER);
-		const Rect2 px_rect(bu.uv_scale.position * Vector2(width, height), bu.uv_scale.size * Vector2(width, height));
+		const BuildUser &build_user = p_users[i];
+		ERR_FAIL_INDEX_V(build_user.slice, slice_count, ERR_INVALID_PARAMETER);
+		const Rect2 px_rect(build_user.uv_scale.position * Vector2(width, height), build_user.uv_scale.size * Vector2(width, height));
 		const int x0 = CLAMP(int(Math::floor(px_rect.position.x)) - CROP_BORDER, 0, width - 1);
 		const int y0 = CLAMP(int(Math::floor(px_rect.position.y)) - CROP_BORDER, 0, height - 1);
 		const int x1 = CLAMP(int(Math::ceil(px_rect.get_end().x)) + CROP_BORDER, x0 + 1, width);
 		const int y1 = CLAMP(int(Math::ceil(px_rect.get_end().y)) + CROP_BORDER, y0 + 1, height);
 		crops[i].rect = Rect2i(x0, y0, x1 - x0, y1 - y0);
-		crops[i].slice = bu.slice;
+		crops[i].slice = build_user.slice;
 
 		User &user = out_users[i];
 		user.inner = Rect2(px_rect.position - Vector2(x0, y0), px_rect.size);
-		user.world_aabb = bu.world_aabb;
+		user.world_aabb = build_user.world_aabb;
 		const float texel_area = MAX(px_rect.size.x * px_rect.size.y, 1.0f);
-		if (bu.world_area > CMP_EPSILON) {
-			user.texel_world_size = Math::sqrt(bu.world_area / texel_area);
+		if (build_user.world_area > CMP_EPSILON) {
+			user.texel_world_size = Math::sqrt(build_user.world_area / texel_area);
 		} else {
-			user.texel_world_size = MAX(bu.world_aabb.get_longest_axis_size(), 0.001f) / MAX(px_rect.size.x, px_rect.size.y);
+			user.texel_world_size = MAX(build_user.world_aabb.get_longest_axis_size(), 0.001f) / MAX(px_rect.size.x, px_rect.size.y);
 		}
 
 		for (int m = 0;; m++) {
