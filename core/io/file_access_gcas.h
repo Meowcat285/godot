@@ -198,12 +198,15 @@ public:
 			CASHash blob_hash;
 			uint64_t size = 0;
 			bool removed = false;
+			bool external = false; // Uses chunks of base packs, can't be read from this pack alone.
+			LocalVector<uint32_t> chunks; // Indices in `chunks` (empty when `external`).
 		};
 
 		GCASHeader header;
 		uint64_t pack_start = 0;
 		LocalVector<String> base_pack_ids; // Hexadecimal.
 		LocalVector<CASHash> chunk_hashes;
+		LocalVector<ChunkLocation> chunks; // Same order as chunk_hashes, with absolute offsets.
 		LocalVector<CASHash> external_chunk_hashes;
 		LocalVector<File> files;
 		LocalVector<Pair<ResourceUID::ID, String>> uids;
@@ -242,6 +245,8 @@ public:
 	static PackedSourceGCAS *get_singleton() { return singleton; }
 
 	static Error read_pack_info(const String &p_path, PackInfo &r_info, uint64_t p_offset = 0);
+	// Opens a file of a pack read with read_pack_info(), without mounting it. Fails for removed and external files.
+	static Ref<FileAccess> open_pack_info_file(const String &p_path, const PackInfo &p_info, uint32_t p_file);
 
 	virtual bool try_open_pack(const String &p_path, bool p_replace_files, uint64_t p_offset, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>()) override;
 	virtual Ref<FileAccess> get_file(const String &p_path, PackedData::PackedFile *p_file, const Vector<uint8_t> &p_decryption_key = Vector<uint8_t>()) override;

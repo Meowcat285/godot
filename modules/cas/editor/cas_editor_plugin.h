@@ -32,10 +32,15 @@
 
 #include "editor/plugins/editor_plugin.h"
 
+class GCASPackExplorer;
+
 class CASEditorPlugin : public EditorPlugin {
 	GDCLASS(CASEditorPlugin, EditorPlugin);
 
+	GCASPackExplorer *pack_explorer = nullptr;
+
 	void _clean_import_cache();
+	void _explore_pack();
 	void _settings_changed();
 
 public:

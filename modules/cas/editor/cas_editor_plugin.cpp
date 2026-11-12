@@ -31,14 +31,25 @@
 #include "cas_editor_plugin.h"
 
 #include "cas_import_store.h"
+#include "gcas_pack_explorer.h"
 
 #include "core/object/callable_mp.h"
+#include "editor/editor_interface.h"
 #include "editor/gui/editor_toaster.h"
 #include "editor/settings/editor_settings.h"
+#include "editor/themes/editor_scale.h"
 
 void CASEditorPlugin::_clean_import_cache() {
 	CASImportStore::get_singleton()->collect_garbage(0);
 	EditorToaster::get_singleton()->popup_str(TTR("Removed imported files that aren't used by the current imports."));
+}
+
+void CASEditorPlugin::_explore_pack() {
+	if (!pack_explorer) {
+		pack_explorer = memnew(GCASPackExplorer);
+		EditorInterface::get_singleton()->get_base_control()->add_child(pack_explorer);
+	}
+	pack_explorer->popup_centered_clamped(Size2(800, 600) * EDSCALE, 0.8);
 }
 
 void CASEditorPlugin::_settings_changed() {
@@ -64,4 +75,5 @@ CASEditorPlugin::CASEditorPlugin() {
 	}
 
 	add_tool_menu_item(TTR("Clean Import Cache"), callable_mp(this, &CASEditorPlugin::_clean_import_cache));
+	add_tool_menu_item(TTR("Explore GCAS Pack..."), callable_mp(this, &CASEditorPlugin::_explore_pack));
 }
