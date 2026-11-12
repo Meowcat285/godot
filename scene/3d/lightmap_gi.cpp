@@ -1635,8 +1635,9 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 		Ref<DirAccess> dir = DirAccess::create_for_path(stream_path);
 		if (dir.is_null() || dir->rename(temp_path, stream_path) != OK) {
+			// Some platforms remove the destination before moving, so only resume if the previous file survived.
+			ERR_FAIL_COND_V_MSG(!FileAccess::exists(stream_path), BAKE_ERROR_CANT_CREATE_IMAGE, vformat("Can't replace \"%s\". The new stream was kept at \"%s\".", stream_path, temp_path));
 			DirAccess::remove_absolute(temp_path);
-			// The previous file is still intact, so resume streaming from it.
 			if (old_stream_data.is_valid()) {
 				old_stream_data->clear_stale();
 			}
