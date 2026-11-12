@@ -292,14 +292,14 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 				remaining -= got;
 			}
 			dst.unref();
-			if (ok && FileAccess::exists(dest) && DirAccess::remove_absolute(dest) != OK) {
-				ok = false;
-			}
-			if (ok && DirAccess::rename_absolute(tmp_dest, dest) != OK) {
-				ok = false;
-			}
 			if (ok) {
-				extracted++;
+				// The copy is complete: if replacing the destination fails, keep the temporary file rather than lose both.
+				if ((FileAccess::exists(dest) && DirAccess::remove_absolute(dest) != OK) || DirAccess::rename_absolute(tmp_dest, dest) != OK) {
+					ERR_PRINT(vformat("Can't replace \"%s\", the extracted file was left at \"%s\".", dest, tmp_dest));
+					failed++;
+				} else {
+					extracted++;
+				}
 			} else {
 				DirAccess::remove_absolute(tmp_dest);
 				if (canceled) {
