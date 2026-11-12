@@ -440,6 +440,9 @@ Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, u
 			loc.compressed_size = decode_u32(e + 40);
 			loc.size = decode_u32(e + 44);
 			loc.codec = e[48];
+			// Chunk data is stored between the header and the index.
+			ERR_FAIL_COND_V(decode_u64(e + 32) < GCAS_HEADER_SIZE || decode_u64(e + 32) > r_info.header.index_offset || loc.compressed_size > r_info.header.index_offset - decode_u64(e + 32), ERR_FILE_CORRUPT);
+			ERR_FAIL_COND_V(loc.codec == GCAS_CHUNK_CODEC_RAW && loc.size != loc.compressed_size, ERR_FILE_CORRUPT);
 		}
 	}
 	if (IndexReader *r = sections.getptr(GCAS_SECTION_EXTERNAL_CHUNKS)) {

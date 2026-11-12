@@ -221,6 +221,7 @@ void GCASPackExplorer::_extract_pressed(bool p_all) {
 		}
 	}
 	if (files_to_extract.is_empty()) {
+		EditorToaster::get_singleton()->popup_str(TTR("The selection has no files to extract."), EditorToaster::SEVERITY_WARNING);
 		return;
 	}
 	extract_dialog->popup_file_dialog();
@@ -230,6 +231,7 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 	uint32_t extracted = 0;
 	uint32_t failed = 0;
 	uint32_t skipped = 0;
+	bool canceled = false;
 	Vector<uint8_t> buffer;
 	buffer.resize_uninitialized(1024 * 1024);
 
@@ -238,6 +240,7 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 		for (uint32_t i = 0; i < files_to_extract.size(); i++) {
 			const PackedSourceGCAS::PackInfo::File &f = info.files[files_to_extract[i]];
 			if (progress.step(f.path, i)) {
+				canceled = true;
 				break;
 			}
 			if (f.external) {
@@ -288,6 +291,9 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 	}
 
 	String message = vformat(TTR("Extracted %d files to \"%s\"."), extracted, p_dir);
+	if (canceled) {
+		message += " " + TTR("Canceled before extracting the other files.");
+	}
 	if (skipped > 0) {
 		message += " " + vformat(TTR("Skipped %d files that use data of a base pack."), skipped);
 	}
@@ -350,7 +356,7 @@ GCASPackExplorer::GCASPackExplorer() {
 	open_dialog->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_FILE);
 	open_dialog->set_access(EditorFileDialog::ACCESS_FILESYSTEM);
 	open_dialog->add_filter("*.gcas", TTR("GCAS Pack"));
-	open_dialog->add_filter("*", TTR("All Files (packs embedded in executables)"));
+	open_dialog->add_filter("*", TTR("All Files"));
 	open_dialog->connect("file_selected", callable_mp(this, &GCASPackExplorer::_pack_selected));
 	add_child(open_dialog);
 
