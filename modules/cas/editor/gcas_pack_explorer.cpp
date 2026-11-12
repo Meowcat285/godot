@@ -32,6 +32,7 @@
 
 #include "core/io/dir_access.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #include "core/version.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
@@ -262,7 +263,11 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 				continue;
 			}
 			// Write to a temporary file first, so a failed or canceled extraction keeps any existing file.
-			const String tmp_dest = dest + ".extracting";
+			// Use a name that isn't taken, so no existing file (or another file of the pack) is overwritten.
+			String tmp_dest;
+			do {
+				tmp_dest = vformat("%s.%d.extracting", dest, OS::get_singleton()->get_ticks_usec());
+			} while (FileAccess::exists(tmp_dest) || DirAccess::exists(tmp_dest));
 			Ref<FileAccess> dst = FileAccess::open(tmp_dest, FileAccess::WRITE);
 			if (dst.is_null()) {
 				ERR_PRINT(vformat("Can't write \"%s\".", tmp_dest));
