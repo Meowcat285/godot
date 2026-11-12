@@ -261,9 +261,11 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 				failed++;
 				continue;
 			}
-			Ref<FileAccess> dst = FileAccess::open(dest, FileAccess::WRITE);
+			// Write to a temporary file first, so a failed or canceled extraction keeps any existing file.
+			const String tmp_dest = dest + ".extracting";
+			Ref<FileAccess> dst = FileAccess::open(tmp_dest, FileAccess::WRITE);
 			if (dst.is_null()) {
-				ERR_PRINT(vformat("Can't write \"%s\".", dest));
+				ERR_PRINT(vformat("Can't write \"%s\".", tmp_dest));
 				failed++;
 				continue;
 			}
@@ -271,6 +273,11 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 			bool ok = true;
 			uint64_t remaining = f.size;
 			while (remaining > 0) {
+				if (remaining < f.size && progress.step(f.path, i)) {
+					canceled = true;
+					ok = false;
+					break;
+				}
 				uint64_t want = MIN(remaining, uint64_t(buffer.size()));
 				uint64_t got = src->get_buffer(buffer.ptrw(), want);
 				if (got != want || !dst->store_buffer(buffer.ptr(), got)) {
@@ -280,11 +287,20 @@ void GCASPackExplorer::_extract_to(const String &p_dir) {
 				remaining -= got;
 			}
 			dst.unref();
+			if (ok && FileAccess::exists(dest) && DirAccess::remove_absolute(dest) != OK) {
+				ok = false;
+			}
+			if (ok && DirAccess::rename_absolute(tmp_dest, dest) != OK) {
+				ok = false;
+			}
 			if (ok) {
 				extracted++;
 			} else {
+				DirAccess::remove_absolute(tmp_dest);
+				if (canceled) {
+					break;
+				}
 				ERR_PRINT(vformat("Can't extract \"%s\": read or write error.", f.path));
-				DirAccess::remove_absolute(dest);
 				failed++;
 			}
 		}

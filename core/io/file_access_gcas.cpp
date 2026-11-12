@@ -412,6 +412,7 @@ static bool _gcas_split_sections(const String &p_path, const Vector<uint8_t> &p_
 }
 
 Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, uint64_t p_offset) {
+	r_info = PackInfo();
 	Vector<uint8_t> index;
 	if (!_load_index(p_path, p_offset, r_info.header, r_info.pack_start, index)) {
 		return ERR_FILE_UNRECOGNIZED;
