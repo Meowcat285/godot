@@ -1622,7 +1622,8 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			DirAccess::remove_absolute(temp_path);
 			ERR_FAIL_V(BAKE_ERROR_CANT_CREATE_IMAGE);
 		}
-		if (streamer) {
+		const bool was_streaming = streamer != nullptr;
+		if (was_streaming) {
 			// Stop streaming from the file before it's replaced.
 			_clear_lightmaps();
 		}
@@ -1635,6 +1636,13 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		Ref<DirAccess> dir = DirAccess::create_for_path(stream_path);
 		if (dir.is_null() || dir->rename(temp_path, stream_path) != OK) {
 			DirAccess::remove_absolute(temp_path);
+			// The previous file is still intact, so resume streaming from it.
+			if (old_stream_data.is_valid()) {
+				old_stream_data->clear_stale();
+			}
+			if (was_streaming) {
+				_assign_lightmaps();
+			}
 			ERR_FAIL_V_MSG(BAKE_ERROR_CANT_CREATE_IMAGE, vformat("Can't replace \"%s\".", stream_path));
 		}
 		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its

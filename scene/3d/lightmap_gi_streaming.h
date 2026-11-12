@@ -105,6 +105,7 @@ public:
 	PackedByteArray read_mip(uint32_t p_user, uint32_t p_mip, const Ref<FileAccess> &p_file) const;
 
 	void mark_stale() { stale.set(); }
+	void clear_stale() { stale.clear(); }
 	bool is_stale() const { return stale.is_set(); }
 
 	const String &get_file_path() const { return file_path; }
