@@ -208,7 +208,7 @@ public:
 	void setup(const Ref<LightmapStreamData> &p_data, RID p_lightmap_instance, int p_pool_size, int p_pool_slices);
 	void add_instance(ObjectID p_node, int32_t p_sub_instance, uint32_t p_user);
 	// Picks and streams mips for the given camera. Call every frame.
-	void update(Camera3D *p_camera);
+	void update(Camera3D *p_camera, const Transform3D &p_lightmap_transform);
 
 	RID get_pool_texture() const { return pool_texture; }
 

@@ -239,6 +239,8 @@ private:
 	int streaming_pool_size = 2048;
 	int streaming_pool_slices = 2;
 	LightmapStreamer *streamer = nullptr;
+	// A copy of light_data with its own renderer lightmap, so nodes sharing light_data stream into their own pools.
+	Ref<LightmapGIData> streaming_light_data;
 
 	Ref<LightmapGIData> light_data;
 	Node *last_owner = nullptr;

@@ -147,11 +147,12 @@ Error LightmapStreamData::build_and_save(const String &p_path, const Vector<Ref<
 			const int iw = mip.image_width;
 			const int ih = mip.image_height;
 
-			// All layers stacked vertically: each layer is a multiple of 4 tall, so its BC6H blocks are contiguous.
-			Vector<uint8_t> stacked;
-			stacked.resize(int64_t(iw) * ih * p_layer_count * 3 * sizeof(float));
-			float *dst = reinterpret_cast<float *>(stacked.ptrw());
+			// Layers are compressed one at a time, which keeps each image within Image::MAX_PIXELS.
+			mip.offset = f->get_position();
 			for (int l = 0; l < p_layer_count; l++) {
+				Vector<uint8_t> padded;
+				padded.resize(int64_t(iw) * ih * 3 * sizeof(float));
+				float *dst = reinterpret_cast<float *>(padded.ptrw());
 				Ref<Image> &content = contents[l];
 				if (content->get_width() != cw || content->get_height() != ch) {
 					content->resize(cw, ch, Image::INTERPOLATE_BILINEAR);
@@ -162,23 +163,21 @@ Error LightmapStreamData::build_and_save(const String &p_path, const Vector<Ref<
 					for (int x = 0; x < iw; x++) {
 						const int sx = CLAMP(x - MIP_PADDING, 0, cw - 1);
 						const float *s = &src[(sy * cw + sx) * 3];
-						float *d = &dst[((int64_t(l) * ih + y) * iw + x) * 3];
+						float *d = &dst[(int64_t(y) * iw + x) * 3];
 						d[0] = s[0];
 						d[1] = s[1];
 						d[2] = s[2];
 					}
 				}
+
+				Ref<Image> image = Image::create_from_data(iw, ih, false, Image::FORMAT_RGBF, padded);
+				image->convert(Image::FORMAT_RGBH);
+				Error err = image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_RGB);
+				ERR_FAIL_COND_V_MSG(err != OK || image->get_format() != Image::FORMAT_BPTC_RGBFU, ERR_CANT_CREATE, "Couldn't compress a streamed lightmap rectangle to BC6H.");
+				const Vector<uint8_t> compressed = image->get_data();
+				ERR_FAIL_COND_V(compressed.size() != int64_t(mip.layer_size), ERR_BUG);
+				f->store_buffer(compressed);
 			}
-
-			Ref<Image> image = Image::create_from_data(iw, ih * p_layer_count, false, Image::FORMAT_RGBF, stacked);
-			image->convert(Image::FORMAT_RGBH);
-			Error err = image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_RGB);
-			ERR_FAIL_COND_V_MSG(err != OK || image->get_format() != Image::FORMAT_BPTC_RGBFU, ERR_CANT_CREATE, "Couldn't compress a streamed lightmap rectangle to BC6H.");
-			const Vector<uint8_t> compressed = image->get_data();
-			ERR_FAIL_COND_V(compressed.size() != int64_t(mip.layer_size) * p_layer_count, ERR_BUG);
-
-			mip.offset = f->get_position();
-			f->store_buffer(compressed);
 		}
 	}
 
@@ -325,6 +324,9 @@ static constexpr int MAX_JOBS = 16;
 static constexpr float DOWNGRADE_HYSTERESIS = 1.5f;
 
 void LightmapStreamer::_create_pool_rd(Ref<PoolHandle> p_pool, int p_size, int p_layers) {
+#ifndef RD_ENABLED
+	ERR_FAIL_MSG("Lightmap streaming requires the Forward+ or Mobile renderer.");
+#else
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	ERR_FAIL_NULL_MSG(rd, "Lightmap streaming requires the Forward+ or Mobile renderer.");
 
@@ -352,17 +354,21 @@ void LightmapStreamer::_create_pool_rd(Ref<PoolHandle> p_pool, int p_size, int p
 	ERR_FAIL_COND(p_pool->rd_texture.is_null());
 	rd->set_resource_name(p_pool->rd_texture, "Lightmap Streaming Pool");
 	p_pool->ready.set();
+#endif // RD_ENABLED
 }
 
 void LightmapStreamer::_free_pool_rd(Ref<PoolHandle> p_pool) {
+#ifdef RD_ENABLED
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	if (rd && p_pool->rd_texture.is_valid()) {
 		rd->free_rid(p_pool->rd_texture);
 	}
+#endif // RD_ENABLED
 	p_pool->rd_texture = RID();
 }
 
 void LightmapStreamer::_upload_rd(Ref<PoolHandle> p_pool, const PackedByteArray &p_data, int p_layers, Rect2i p_rect, int p_base_layer) {
+#ifdef RD_ENABLED
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	ERR_FAIL_NULL(rd);
 	ERR_FAIL_COND(p_pool->rd_texture.is_null());
@@ -388,6 +394,7 @@ void LightmapStreamer::_upload_rd(Ref<PoolHandle> p_pool, const PackedByteArray 
 		rd->texture_copy(staging, p_pool->rd_texture, Vector3(), Vector3(p_rect.position.x, p_rect.position.y, 0), Vector3(p_rect.size.x, p_rect.size.y, 1), 0, 0, i, p_base_layer + i);
 	}
 	rd->free_rid(staging);
+#endif // RD_ENABLED
 }
 
 LightmapStreamer::Placement LightmapStreamer::_allocate(int p_width, int p_height) {
@@ -633,7 +640,7 @@ void LightmapStreamer::add_instance(ObjectID p_node, int32_t p_sub_instance, uin
 	instances.push_back(instance);
 }
 
-void LightmapStreamer::update(Camera3D *p_camera) {
+void LightmapStreamer::update(Camera3D *p_camera, const Transform3D &p_lightmap_transform) {
 	if (pool.is_null() || !pool->ready.is_set()) {
 		return;
 	}
@@ -655,8 +662,13 @@ void LightmapStreamer::update(Camera3D *p_camera) {
 	const float viewport_height = MAX(p_camera->get_viewport()->get_visible_rect().size.y, 1.0f);
 	const bool orthogonal = projection.is_orthogonal();
 	// World size of one pixel per unit of distance (perspective), or in absolute terms (orthogonal).
-	const float pixel_scale = 2.0f / (MAX(Math::abs(projection.columns[1][1]), 0.0001f) * viewport_height);
-	const Vector3 camera_position = p_camera->get_global_position();
+	float pixel_scale = 2.0f / (MAX(Math::abs(projection.columns[1][1]), 0.0001f) * viewport_height);
+	// Bounds and texel sizes are baked in LightmapGI space.
+	const Vector3 camera_position = p_lightmap_transform.affine_inverse().xform(p_camera->get_global_position());
+	if (orthogonal) {
+		const Vector3 scale = p_lightmap_transform.basis.get_scale_abs();
+		pixel_scale /= MAX((scale.x + scale.y + scale.z) / 3.0f, 0.0001f);
+	}
 
 	struct Request {
 		uint32_t instance = 0;
@@ -715,6 +727,26 @@ void LightmapStreamer::update(Camera3D *p_camera) {
 			placement = _allocate(user.mips[mip_index].image_width, user.mips[mip_index].image_height);
 			if (placement.is_valid()) {
 				break;
+			}
+		}
+		if (!placement.is_valid() && !request.downgrade && instance.placement.is_valid()) {
+			// The finer mip may fit in the space this instance already holds. Try with it freed, and put the
+			// slice back as it was if that doesn't help.
+			const int old_slice = instance.placement.slice;
+			const PoolSlice saved = slices[old_slice];
+			_free(instance.placement);
+			for (mip_index = request.mip; mip_index < instance.current_mip; mip_index++) {
+				placement = _allocate(user.mips[mip_index].image_width, user.mips[mip_index].image_height);
+				if (placement.is_valid()) {
+					break;
+				}
+			}
+			if (placement.is_valid()) {
+				// The new rectangle may overlap the old one, so show the floor mip until it's loaded.
+				instance.placement = Placement();
+				_use_floor(request.instance);
+			} else {
+				slices[old_slice] = saved;
 			}
 		}
 		if (!placement.is_valid()) {

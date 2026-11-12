@@ -1614,10 +1614,17 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 
 		const String stream_path = texture_filename + ".lmstream";
+		if (streamer) {
+			// Stop streaming from the file before it's rewritten.
+			_clear_lightmaps();
+		}
 		const Error stream_err = LightmapStreamData::build_and_save(stream_path, bake_layers, layer_count, stream_users, supersampling_enabled ? supersampling_factor : 1.0f);
 		ERR_FAIL_COND_V(stream_err != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
-		stream_data = ResourceLoader::load(stream_path, "", ResourceFormatLoader::CACHE_MODE_REPLACE);
-		ERR_FAIL_COND_V(stream_data.is_null(), BAKE_ERROR_CANT_CREATE_IMAGE);
+		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its
+		// cache entry. Anything still holding the old resource keeps a consistent index.
+		stream_data.instantiate();
+		ERR_FAIL_COND_V(stream_data->load_header(stream_path) != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
+		stream_data->set_path(stream_path, true);
 	} else {
 		// Save the lightmap atlases.
 		BakeError save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename, lightmap_textures, false);
@@ -1884,9 +1891,9 @@ void LightmapGI::_update_streaming() {
 	} else if (get_viewport()) {
 		camera = get_viewport()->get_camera_3d();
 	}
-	streamer->update(camera);
-	if (light_data->_get_streamed_texture() != streamer->get_pool_texture()) {
-		light_data->_set_streamed_texture(streamer->get_pool_texture());
+	streamer->update(camera, get_global_transform());
+	if (streaming_light_data->_get_streamed_texture() != streamer->get_pool_texture()) {
+		streaming_light_data->_set_streamed_texture(streamer->get_pool_texture());
 	}
 }
 
@@ -1902,6 +1909,10 @@ void LightmapGI::_assign_lightmaps() {
 
 	if (light_data->get_stream_data().is_valid()) {
 		ERR_FAIL_COND_MSG(streamer, "Lightmaps are already assigned.");
+		streaming_light_data = light_data->duplicate();
+		streaming_light_data->update_shadowmask_mode(shadowmask_mode);
+		streaming_light_data->update_specular_intensity(specular_intensity);
+		set_base(streaming_light_data->get_rid());
 		streamer = memnew(LightmapStreamer);
 		streamer->setup(light_data->get_stream_data(), get_instance(), streaming_pool_size, streaming_pool_slices);
 	}
@@ -1970,9 +1981,11 @@ void LightmapGI::_clear_lightmaps() {
 
 	if (streamer) {
 		set_process_internal(false);
-		light_data->_set_streamed_texture(RID());
+		streaming_light_data->_set_streamed_texture(RID());
 		memdelete(streamer);
 		streamer = nullptr;
+		set_base(light_data->get_rid());
+		streaming_light_data.unref();
 	}
 }
 
@@ -2052,6 +2065,9 @@ void LightmapGI::set_shadowmask_mode(LightmapGIData::ShadowmaskMode p_mode) {
 	shadowmask_mode = p_mode;
 	if (light_data.is_valid()) {
 		light_data->update_shadowmask_mode(p_mode);
+		if (streaming_light_data.is_valid()) {
+			streaming_light_data->update_shadowmask_mode(p_mode);
+		}
 	}
 
 	update_configuration_warnings();
@@ -2262,6 +2278,9 @@ void LightmapGI::set_specular_intensity(float p_strength) {
 
 	if (light_data.is_valid()) {
 		light_data->update_specular_intensity(p_strength);
+		if (streaming_light_data.is_valid()) {
+			streaming_light_data->update_specular_intensity(p_strength);
+		}
 	}
 }
 
