@@ -1622,11 +1622,6 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			DirAccess::remove_absolute(temp_path);
 			ERR_FAIL_V(BAKE_ERROR_CANT_CREATE_IMAGE);
 		}
-		const bool was_streaming = streamer != nullptr;
-		if (was_streaming) {
-			// Stop streaming from the file before it's replaced.
-			_clear_lightmaps();
-		}
 		// Other LightmapGIs may still stream the old file. They keep the mips they have, but stop loading new ones
 		// until they are reassigned, so they never read the new file with the old index.
 		Ref<LightmapStreamData> old_stream_data = ResourceCache::get_ref(stream_path);
@@ -1641,10 +1636,11 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			if (old_stream_data.is_valid()) {
 				old_stream_data->clear_stale();
 			}
-			if (was_streaming) {
-				_assign_lightmaps();
-			}
 			ERR_FAIL_V_MSG(BAKE_ERROR_CANT_CREATE_IMAGE, vformat("Can't replace \"%s\".", stream_path));
+		}
+		if (streamer) {
+			// Stop streaming the previous data. It's restarted with the new data when the bake assigns it.
+			_clear_lightmaps();
 		}
 		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its
 		// cache entry. Anything still holding the old resource keeps a consistent index.
