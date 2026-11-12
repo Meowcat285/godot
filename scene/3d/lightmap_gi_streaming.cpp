@@ -264,14 +264,21 @@ Error LightmapStreamData::load_header(const String &p_path) {
 PackedByteArray LightmapStreamData::read_mip(uint32_t p_user, uint32_t p_mip) const {
 	ERR_FAIL_UNSIGNED_INDEX_V(p_user, users.size(), PackedByteArray());
 	ERR_FAIL_UNSIGNED_INDEX_V(p_mip, users[p_user].mips.size(), PackedByteArray());
-	const Mip &mip = users[p_user].mips[p_mip];
-
 	Ref<FileAccess> f = FileAccess::open(get_path(), FileAccess::READ);
 	ERR_FAIL_COND_V(f.is_null(), PackedByteArray());
-	f->seek(mip.offset);
+	return read_mip(p_user, p_mip, f);
+}
+
+PackedByteArray LightmapStreamData::read_mip(uint32_t p_user, uint32_t p_mip, const Ref<FileAccess> &p_file) const {
+	ERR_FAIL_UNSIGNED_INDEX_V(p_user, users.size(), PackedByteArray());
+	ERR_FAIL_UNSIGNED_INDEX_V(p_mip, users[p_user].mips.size(), PackedByteArray());
+	ERR_FAIL_COND_V(p_file.is_null(), PackedByteArray());
+	const Mip &mip = users[p_user].mips[p_mip];
+
+	p_file->seek(mip.offset);
 	PackedByteArray data;
 	data.resize(int64_t(mip.layer_size) * layer_count);
-	const uint64_t read = f->get_buffer(data.ptrw(), data.size());
+	const uint64_t read = p_file->get_buffer(data.ptrw(), data.size());
 	ERR_FAIL_COND_V(read != uint64_t(data.size()), PackedByteArray());
 	return data;
 }
@@ -448,6 +455,12 @@ void LightmapStreamer::_free(const Placement &p_placement) {
 		shelf.used_width = 0;
 		shelf.free_spans.clear();
 		shelf.free_spans.push_back({ 0, pool_size });
+		// Shelves are only ever added at the top, so the vector stays sorted by y. Give the space of empty
+		// shelves at the top back, so it can be cut into shelves of another height.
+		while (!slice.shelves.is_empty() && slice.shelves[slice.shelves.size() - 1].used_width == 0) {
+			slice.next_y = slice.shelves[slice.shelves.size() - 1].y;
+			slice.shelves.resize(slice.shelves.size() - 1);
+		}
 		return;
 	}
 
@@ -501,29 +514,43 @@ RID LightmapStreamer::_get_instance_rid(const Instance &p_instance) const {
 	return vi ? vi->get_instance() : RID();
 }
 
-void LightmapStreamer::_apply(uint32_t p_instance, int p_mip, const Placement &p_placement, const PackedByteArray &p_data) {
-	Instance &instance = instances[p_instance];
-	const LightmapStreamData::User &user = data->get_user(instance.user);
+void LightmapStreamer::_set_lightmap(const Instance &p_instance, int p_mip, const Placement &p_placement) {
+	const LightmapStreamData::User &user = data->get_user(p_instance.user);
 	const LightmapStreamData::Mip &mip0 = user.mips[0];
 	const LightmapStreamData::Mip &mip = user.mips[p_mip];
-	const int layer_count = data->get_layer_count();
-
-	RS::get_singleton()->call_on_render_thread(callable_mp_static(&LightmapStreamer::_upload_rd).bind(pool, p_data, layer_count, p_placement.rect, p_placement.slice * layer_count));
-
 	const Vector2 scale(float(mip.content_width) / mip0.content_width, float(mip.content_height) / mip0.content_height);
 	const Vector2 origin = Vector2(p_placement.rect.position) + Vector2(LightmapStreamData::MIP_PADDING, LightmapStreamData::MIP_PADDING);
 	const Rect2 uv_rect((origin + user.inner.position * scale) / pool_size, user.inner.size * scale / pool_size);
-	const RID rid = _get_instance_rid(instance);
+	const RID rid = _get_instance_rid(p_instance);
 	if (rid.is_valid()) {
-		// Queued after the upload, so the instance never samples the rectangle before its data is there.
 		RS::get_singleton()->instance_geometry_set_lightmap(rid, lightmap_instance, uv_rect, p_placement.slice);
 	}
+}
+
+void LightmapStreamer::_apply(uint32_t p_instance, int p_mip, const Placement &p_placement, const PackedByteArray &p_data) {
+	Instance &instance = instances[p_instance];
+	const int layer_count = data->get_layer_count();
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&LightmapStreamer::_upload_rd).bind(pool, p_data, layer_count, p_placement.rect, p_placement.slice * layer_count));
+	// Queued after the upload, so the instance never samples the rectangle before its data is there.
+	_set_lightmap(instance, p_mip, p_placement);
 
 	if (instance.placement.is_valid()) {
 		_free(instance.placement);
 	}
 	instance.placement = p_placement;
 	instance.current_mip = p_mip;
+}
+
+void LightmapStreamer::_use_floor(uint32_t p_instance) {
+	Instance &instance = instances[p_instance];
+	ERR_FAIL_COND(!instance.floor_placement.is_valid());
+	const int floor_mip = data->get_user(instance.user).mips.size() - 1;
+	_set_lightmap(instance, floor_mip, instance.floor_placement);
+	if (instance.placement.is_valid()) {
+		_free(instance.placement);
+		instance.placement = Placement();
+	}
+	instance.current_mip = floor_mip;
 }
 
 int LightmapStreamer::_get_desired_mip(const Instance &p_instance, const Vector3 &p_camera_position, float p_pixel_scale, bool p_orthogonal, float p_distance_scale) const {
@@ -558,18 +585,23 @@ void LightmapStreamer::_finish_jobs(bool p_wait) {
 }
 
 void LightmapStreamer::_load_floor_mips() {
+	Ref<FileAccess> f = FileAccess::open(data->get_path(), FileAccess::READ);
+	ERR_FAIL_COND_MSG(f.is_null(), vformat("Can't open lightmap stream file \"%s\".", data->get_path()));
 	for (uint32_t i = 0; i < instances.size(); i++) {
 		Instance &instance = instances[i];
 		const LightmapStreamData::User &user = data->get_user(instance.user);
 		const int mip = user.mips.size() - 1;
 		const Placement placement = _allocate(user.mips[mip].image_width, user.mips[mip].image_height);
 		ERR_CONTINUE_MSG(!placement.is_valid(), "Lightmap streaming pool is too small for even the lowest-resolution lightmaps. Increase the streaming pool size or slice count.");
-		const PackedByteArray layers = _prepare_layers(data->read_mip(instance.user, mip), instance.user, mip);
+		const PackedByteArray layers = _prepare_layers(data->read_mip(instance.user, mip, f), instance.user, mip);
 		if (layers.is_empty()) {
 			_free(placement);
 			continue;
 		}
-		_apply(i, mip, placement, layers);
+		const int layer_count = data->get_layer_count();
+		RS::get_singleton()->call_on_render_thread(callable_mp_static(&LightmapStreamer::_upload_rd).bind(pool, layers, layer_count, placement.rect, placement.slice * layer_count));
+		instance.floor_placement = placement;
+		_use_floor(i);
 	}
 }
 
@@ -669,16 +701,34 @@ void LightmapStreamer::update(Camera3D *p_camera) {
 			break;
 		}
 		Instance &instance = instances[request.instance];
-		const LightmapStreamData::Mip &mip = data->get_user(instance.user).mips[request.mip];
-		const Placement placement = _allocate(mip.image_width, mip.image_height);
+		const LightmapStreamData::User &user = data->get_user(instance.user);
+		if (request.mip == int(user.mips.size()) - 1) {
+			// The floor mip is always resident.
+			_use_floor(request.instance);
+			continue;
+		}
+		// If the wanted mip doesn't fit, an upgrade settles for the finest mip that does.
+		int mip_index = request.mip;
+		const int last_mip = request.downgrade ? request.mip : instance.current_mip - 1;
+		Placement placement;
+		for (; mip_index <= last_mip; mip_index++) {
+			placement = _allocate(user.mips[mip_index].image_width, user.mips[mip_index].image_height);
+			if (placement.is_valid()) {
+				break;
+			}
+		}
 		if (!placement.is_valid()) {
-			// Pool is full; try again once something further away has been dropped.
+			if (request.downgrade) {
+				// Drop to the floor mip to free this instance's space. It moves up again once there is room.
+				_use_floor(request.instance);
+			}
+			// Otherwise try again once something further away has been dropped.
 			continue;
 		}
 		Job *job = memnew(Job);
 		job->instance = request.instance;
 		job->user = instance.user;
-		job->mip = request.mip;
+		job->mip = mip_index;
 		job->placement = placement;
 		job->task = WorkerThreadPool::get_singleton()->add_template_task(this, &LightmapStreamer::_load_job, job, false, "Lightmap streaming");
 		instance.loading = true;

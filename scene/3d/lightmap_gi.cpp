@@ -1901,6 +1901,7 @@ void LightmapGI::_assign_lightmaps() {
 	ERR_FAIL_COND(light_data.is_null());
 
 	if (light_data->get_stream_data().is_valid()) {
+		ERR_FAIL_COND_MSG(streamer, "Lightmaps are already assigned.");
 		streamer = memnew(LightmapStreamer);
 		streamer->setup(light_data->get_stream_data(), get_instance(), streaming_pool_size, streaming_pool_slices);
 	}

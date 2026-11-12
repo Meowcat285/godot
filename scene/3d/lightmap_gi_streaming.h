@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/io/file_access.h"
 #include "core/io/image.h"
 #include "core/io/resource.h"
 #include "core/io/resource_loader.h"
@@ -98,6 +99,8 @@ public:
 	Error load_header(const String &p_path);
 	// Reads all layers of one mip, concatenated. Thread-safe.
 	PackedByteArray read_mip(uint32_t p_user, uint32_t p_mip) const;
+	// Same, reading from an already open file. Not thread-safe for a shared file.
+	PackedByteArray read_mip(uint32_t p_user, uint32_t p_mip, const Ref<FileAccess> &p_file) const;
 
 	uint32_t get_layer_count() const { return layer_count; }
 	uint32_t get_user_count() const { return users.size(); }
@@ -160,7 +163,8 @@ private:
 		uint32_t user = 0;
 		int current_mip = -1;
 		int finest_mip = 0; // Finest mip that fits in a pool slice.
-		Placement placement;
+		Placement floor_placement; // The coarsest mip, always resident so the pool never deadlocks.
+		Placement placement; // A finer mip, if one is shown.
 		bool loading = false;
 	};
 
@@ -192,7 +196,9 @@ private:
 
 	PackedByteArray _prepare_layers(const PackedByteArray &p_data, uint32_t p_user, uint32_t p_mip) const;
 	void _load_job(Job *p_job);
+	void _set_lightmap(const Instance &p_instance, int p_mip, const Placement &p_placement);
 	void _apply(uint32_t p_instance, int p_mip, const Placement &p_placement, const PackedByteArray &p_data);
+	void _use_floor(uint32_t p_instance);
 	RID _get_instance_rid(const Instance &p_instance) const;
 	int _get_desired_mip(const Instance &p_instance, const Vector3 &p_camera_position, float p_pixel_scale, bool p_orthogonal, float p_distance_scale) const;
 	void _finish_jobs(bool p_wait);
