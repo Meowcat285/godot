@@ -264,6 +264,7 @@ Error LightmapStreamData::load_header(const String &p_path) {
 		}
 	}
 	ERR_FAIL_COND_V(f->eof_reached(), ERR_FILE_CORRUPT);
+	file_path = p_path;
 	return OK;
 }
 
@@ -273,7 +274,7 @@ PackedByteArray LightmapStreamData::read_mip(uint32_t p_user, uint32_t p_mip) co
 	if (stale.is_set()) {
 		return PackedByteArray();
 	}
-	Ref<FileAccess> f = FileAccess::open(get_path(), FileAccess::READ);
+	Ref<FileAccess> f = FileAccess::open(file_path, FileAccess::READ);
 	ERR_FAIL_COND_V(f.is_null(), PackedByteArray());
 	return read_mip(p_user, p_mip, f);
 }
@@ -594,7 +595,8 @@ void LightmapStreamer::_finish_jobs(bool p_wait) {
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(job->task);
 		Instance &instance = instances[job->instance];
 		instance.loading = false;
-		if (p_wait || job->data.is_empty()) {
+		// A job can pass the stale check just before a rebake replaces the file, so drop its result here too.
+		if (p_wait || job->data.is_empty() || data->is_stale()) {
 			_free(job->placement);
 		} else {
 			_apply(job->instance, job->mip, job->placement, job->data);
@@ -605,8 +607,8 @@ void LightmapStreamer::_finish_jobs(bool p_wait) {
 }
 
 void LightmapStreamer::_load_floor_mips() {
-	Ref<FileAccess> f = FileAccess::open(data->get_path(), FileAccess::READ);
-	ERR_FAIL_COND_MSG(f.is_null(), vformat("Can't open lightmap stream file \"%s\".", data->get_path()));
+	Ref<FileAccess> f = FileAccess::open(data->get_file_path(), FileAccess::READ);
+	ERR_FAIL_COND_MSG(f.is_null(), vformat("Can't open lightmap stream file \"%s\".", data->get_file_path()));
 	for (uint32_t i = 0; i < instances.size(); i++) {
 		Instance &instance = instances[i];
 		const LightmapStreamData::User &user = data->get_user(instance.user);
@@ -660,15 +662,14 @@ void LightmapStreamer::update(Camera3D *p_camera, const Transform3D &p_lightmap_
 	if (pool_texture.is_null()) {
 		pool_texture = RS::get_singleton()->texture_rd_create(pool->rd_texture, RSE::TEXTURE_LAYERED_2D_ARRAY);
 	}
-	if (!floor_loaded) {
-		floor_loaded = true;
-		_load_floor_mips();
-	}
-
 	_finish_jobs(false);
 	if (data->is_stale()) {
 		// A rebake replaced the file. Keep what's resident until this streamer is reassigned.
 		return;
+	}
+	if (!floor_loaded) {
+		floor_loaded = true;
+		_load_floor_mips();
 	}
 
 	if (!p_camera || !p_camera->is_inside_tree() || !p_camera->get_viewport()) {

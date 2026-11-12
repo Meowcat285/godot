@@ -88,6 +88,7 @@ public:
 private:
 	uint32_t layer_count = 1;
 	LocalVector<User> users;
+	String file_path; // Set once by load_header(). Workers read it, so it never follows later get_path() changes.
 	SafeFlag stale; // Set when a rebake rewrites the file, so reads stop instead of returning mismatched data.
 
 protected:
@@ -106,6 +107,7 @@ public:
 	void mark_stale() { stale.set(); }
 	bool is_stale() const { return stale.is_set(); }
 
+	const String &get_file_path() const { return file_path; }
 	uint32_t get_layer_count() const { return layer_count; }
 	uint32_t get_user_count() const { return users.size(); }
 	const User &get_user(uint32_t p_user) const { return users[p_user]; }
