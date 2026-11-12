@@ -1618,6 +1618,12 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			// Stop streaming from the file before it's rewritten.
 			_clear_lightmaps();
 		}
+		// Other LightmapGIs may still stream the old file. They keep the mips they have, but stop loading new ones
+		// until they are reassigned, so they never read the new file with the old index.
+		Ref<LightmapStreamData> old_stream_data = ResourceCache::get_ref(stream_path);
+		if (old_stream_data.is_valid()) {
+			old_stream_data->mark_stale();
+		}
 		const Error stream_err = LightmapStreamData::build_and_save(stream_path, bake_layers, layer_count, stream_users, supersampling_enabled ? supersampling_factor : 1.0f);
 		ERR_FAIL_COND_V(stream_err != OK, BAKE_ERROR_CANT_CREATE_IMAGE);
 		// Replace-mode loading would keep the cached resource's old index, so load a new one and take over its

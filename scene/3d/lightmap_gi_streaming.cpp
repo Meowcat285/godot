@@ -263,6 +263,9 @@ Error LightmapStreamData::load_header(const String &p_path) {
 PackedByteArray LightmapStreamData::read_mip(uint32_t p_user, uint32_t p_mip) const {
 	ERR_FAIL_UNSIGNED_INDEX_V(p_user, users.size(), PackedByteArray());
 	ERR_FAIL_UNSIGNED_INDEX_V(p_mip, users[p_user].mips.size(), PackedByteArray());
+	if (stale.is_set()) {
+		return PackedByteArray();
+	}
 	Ref<FileAccess> f = FileAccess::open(get_path(), FileAccess::READ);
 	ERR_FAIL_COND_V(f.is_null(), PackedByteArray());
 	return read_mip(p_user, p_mip, f);
@@ -272,6 +275,9 @@ PackedByteArray LightmapStreamData::read_mip(uint32_t p_user, uint32_t p_mip, co
 	ERR_FAIL_UNSIGNED_INDEX_V(p_user, users.size(), PackedByteArray());
 	ERR_FAIL_UNSIGNED_INDEX_V(p_mip, users[p_user].mips.size(), PackedByteArray());
 	ERR_FAIL_COND_V(p_file.is_null(), PackedByteArray());
+	if (stale.is_set()) {
+		return PackedByteArray();
+	}
 	const Mip &mip = users[p_user].mips[p_mip];
 
 	p_file->seek(mip.offset);

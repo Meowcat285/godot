@@ -88,6 +88,7 @@ public:
 private:
 	uint32_t layer_count = 1;
 	LocalVector<User> users;
+	SafeFlag stale; // Set when a rebake rewrites the file, so reads stop instead of returning mismatched data.
 
 protected:
 	static void _bind_methods();
@@ -101,6 +102,9 @@ public:
 	PackedByteArray read_mip(uint32_t p_user, uint32_t p_mip) const;
 	// Same, reading from an already open file. Not thread-safe for a shared file.
 	PackedByteArray read_mip(uint32_t p_user, uint32_t p_mip, const Ref<FileAccess> &p_file) const;
+
+	void mark_stale() { stale.set(); }
+	bool is_stale() const { return stale.is_set(); }
 
 	uint32_t get_layer_count() const { return layer_count; }
 	uint32_t get_user_count() const { return users.size(); }
