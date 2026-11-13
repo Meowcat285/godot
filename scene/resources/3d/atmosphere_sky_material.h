@@ -45,6 +45,12 @@ public:
 	static constexpr int TRANSMITTANCE_LUT_HEIGHT = 64;
 	static constexpr int MULTI_SCATTERING_LUT_SIZE = 32;
 
+	enum CloudsQuality {
+		CLOUDS_QUALITY_LOW,
+		CLOUDS_QUALITY_MEDIUM,
+		CLOUDS_QUALITY_HIGH,
+	};
+
 private:
 	enum ShaderFlags {
 		SHADER_FLAG_DEBANDING = 1,
@@ -88,6 +94,25 @@ private:
 	float energy_multiplier = 1.0f;
 	bool use_debanding = true;
 	Ref<Texture2D> night_sky;
+
+	// Volumetric clouds, rendered by the renderer's AtmosphereClouds effect from these material parameters.
+	bool clouds_enabled = false;
+	float clouds_coverage = 0.5f;
+	float clouds_type = 0.5f;
+	float clouds_density = 20.0f; // 1/km.
+	float clouds_bottom_altitude = 1.5f; // km.
+	float clouds_thickness = 3.0f; // km.
+	float clouds_shape_scale = 6.0f; // km.
+	float clouds_detail_scale = 0.6f; // km.
+	float clouds_detail_strength = 0.35f;
+	float clouds_weather_scale = 30.0f; // km.
+	Color clouds_albedo = Color(1, 1, 1);
+	float clouds_wind_direction = 0.0f; // Degrees.
+	float clouds_wind_speed = 0.0f; // m/s.
+	CloudsQuality clouds_quality = CLOUDS_QUALITY_MEDIUM;
+	Ref<Texture2D> clouds_weather_map;
+
+	void _update_clouds_params();
 
 	mutable Ref<ImageTexture> transmittance_lut;
 	mutable Ref<ImageTexture> multi_scattering_lut;
@@ -155,6 +180,37 @@ public:
 	void set_night_sky(const Ref<Texture2D> &p_night_sky);
 	Ref<Texture2D> get_night_sky() const;
 
+	void set_clouds_enabled(bool p_enabled);
+	bool get_clouds_enabled() const;
+	void set_clouds_coverage(float p_coverage);
+	float get_clouds_coverage() const;
+	void set_clouds_type(float p_type);
+	float get_clouds_type() const;
+	void set_clouds_density(float p_density);
+	float get_clouds_density() const;
+	void set_clouds_bottom_altitude(float p_altitude);
+	float get_clouds_bottom_altitude() const;
+	void set_clouds_thickness(float p_thickness);
+	float get_clouds_thickness() const;
+	void set_clouds_shape_scale(float p_scale);
+	float get_clouds_shape_scale() const;
+	void set_clouds_detail_scale(float p_scale);
+	float get_clouds_detail_scale() const;
+	void set_clouds_detail_strength(float p_strength);
+	float get_clouds_detail_strength() const;
+	void set_clouds_weather_scale(float p_scale);
+	float get_clouds_weather_scale() const;
+	void set_clouds_albedo(const Color &p_albedo);
+	Color get_clouds_albedo() const;
+	void set_clouds_wind_direction(float p_degrees);
+	float get_clouds_wind_direction() const;
+	void set_clouds_wind_speed(float p_speed);
+	float get_clouds_wind_speed() const;
+	void set_clouds_quality(CloudsQuality p_quality);
+	CloudsQuality get_clouds_quality() const;
+	void set_clouds_weather_map(const Ref<Texture2D> &p_weather_map);
+	Ref<Texture2D> get_clouds_weather_map() const;
+
 	virtual Shader::Mode get_shader_mode() const override;
 	virtual RID get_shader_rid() const override;
 	virtual RID get_rid() const override;
@@ -163,3 +219,5 @@ public:
 
 	AtmosphereSkyMaterial();
 };
+
+VARIANT_ENUM_CAST(AtmosphereSkyMaterial::CloudsQuality);
