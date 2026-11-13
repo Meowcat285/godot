@@ -412,6 +412,7 @@ static bool _gcas_split_sections(const String &p_path, const Vector<uint8_t> &p_
 }
 
 Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, uint64_t p_offset) {
+	r_info = PackInfo();
 	Vector<uint8_t> index;
 	if (!_load_index(p_path, p_offset, r_info.header, r_info.pack_start, index)) {
 		return ERR_FILE_UNRECOGNIZED;
@@ -430,8 +431,19 @@ Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, u
 	if (IndexReader *r = sections.getptr(GCAS_SECTION_CHUNKS)) {
 		uint32_t count = r->count(GCAS_CHUNK_ENTRY_SIZE);
 		r_info.chunk_hashes.resize(count);
+		r_info.chunks.resize(count);
 		for (uint32_t i = 0; i < count; i++) {
-			memcpy(r_info.chunk_hashes[i].data, r->bytes(GCAS_CHUNK_ENTRY_SIZE), CASHash::SIZE);
+			const uint8_t *e = r->bytes(GCAS_CHUNK_ENTRY_SIZE);
+			memcpy(r_info.chunk_hashes[i].data, e, CASHash::SIZE);
+			ChunkLocation &loc = r_info.chunks[i];
+			loc.hash = r_info.chunk_hashes[i];
+			loc.offset = r_info.pack_start + decode_u64(e + 32);
+			loc.compressed_size = decode_u32(e + 40);
+			loc.size = decode_u32(e + 44);
+			loc.codec = e[48];
+			// Chunk data is stored between the header and the index.
+			ERR_FAIL_COND_V(decode_u64(e + 32) < GCAS_HEADER_SIZE || decode_u64(e + 32) > r_info.header.index_offset || loc.compressed_size > r_info.header.index_offset - decode_u64(e + 32), ERR_FILE_CORRUPT);
+			ERR_FAIL_COND_V(loc.codec == GCAS_CHUNK_CODEC_RAW && loc.size != loc.compressed_size, ERR_FILE_CORRUPT);
 		}
 	}
 	if (IndexReader *r = sections.getptr(GCAS_SECTION_EXTERNAL_CHUNKS)) {
@@ -446,6 +458,14 @@ Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, u
 	IndexReader *blob_section = sections.getptr(GCAS_SECTION_BLOBS);
 	IndexReader *file_section = sections.getptr(GCAS_SECTION_FILES);
 	ERR_FAIL_COND_V_MSG(!strings || !blob_section || !file_section, ERR_FILE_CORRUPT, vformat("GCAS pack \"%s\" is missing index sections.", p_path));
+
+	uint32_t ref_count = 0;
+	const uint8_t *refs = nullptr;
+	if (IndexReader *r = sections.getptr(GCAS_SECTION_CHUNK_REFS)) {
+		ref_count = r->count(4);
+		refs = r->bytes(uint64_t(ref_count) * 4);
+		ERR_FAIL_COND_V(r->error, ERR_FILE_CORRUPT);
+	}
 
 	uint32_t blob_count = blob_section->count(GCAS_BLOB_ENTRY_SIZE);
 	const uint8_t *blobs = blob_section->bytes(uint64_t(blob_count) * GCAS_BLOB_ENTRY_SIZE);
@@ -463,10 +483,28 @@ Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, u
 			file.removed = true;
 		} else {
 			ERR_FAIL_COND_V(blob >= blob_count, ERR_FILE_CORRUPT);
-			memcpy(file.blob_hash.data, blobs + blob * GCAS_BLOB_ENTRY_SIZE, CASHash::SIZE);
-			file.size = decode_u64(blobs + blob * GCAS_BLOB_ENTRY_SIZE + 32);
+			const uint8_t *b = blobs + uint64_t(blob) * GCAS_BLOB_ENTRY_SIZE;
+			memcpy(file.blob_hash.data, b, CASHash::SIZE);
+			file.size = decode_u64(b + 32);
+			uint32_t first_ref = decode_u32(b + 40);
+			uint32_t blob_ref_count = decode_u32(b + 44);
+			ERR_FAIL_COND_V(uint64_t(first_ref) + blob_ref_count > ref_count, ERR_FILE_CORRUPT);
+			uint64_t total = 0;
+			for (uint32_t j = 0; j < blob_ref_count; j++) {
+				uint32_t ref = decode_u32(refs + uint64_t(first_ref + j) * 4);
+				if (ref & GCAS_CHUNK_REF_EXTERNAL) {
+					file.external = true;
+					file.chunks.clear();
+					break;
+				}
+				ERR_FAIL_COND_V(ref >= r_info.chunks.size(), ERR_FILE_CORRUPT);
+				file.chunks.push_back(ref);
+				total += r_info.chunks[ref].size;
+			}
+			ERR_FAIL_COND_V(!file.external && total != file.size, ERR_FILE_CORRUPT);
 		}
 	}
+	ERR_FAIL_COND_V(blob_section->error || file_section->error, ERR_FILE_CORRUPT);
 
 	if (IndexReader *r = sections.getptr(GCAS_SECTION_UIDS)) {
 		uint32_t count = r->count(GCAS_UID_ENTRY_SIZE);
@@ -480,6 +518,27 @@ Error PackedSourceGCAS::read_pack_info(const String &p_path, PackInfo &r_info, u
 	}
 
 	return OK;
+}
+
+Ref<FileAccess> PackedSourceGCAS::open_pack_info_file(const String &p_path, const PackInfo &p_info, uint32_t p_file) {
+	ERR_FAIL_UNSIGNED_INDEX_V(p_file, p_info.files.size(), Ref<FileAccess>());
+	const PackInfo::File &file = p_info.files[p_file];
+	ERR_FAIL_COND_V(file.removed || file.external, Ref<FileAccess>());
+
+	LocalVector<FileAccessGCAS::Chunk> file_chunks;
+	file_chunks.resize(file.chunks.size());
+	uint64_t start = 0;
+	for (uint32_t i = 0; i < file.chunks.size(); i++) {
+		FileAccessGCAS::Chunk &c = file_chunks[i];
+		c.location = p_info.chunks[file.chunks[i]];
+		ERR_FAIL_COND_V_MSG(c.location.codec != GCAS_CHUNK_CODEC_RAW && c.location.codec != GCAS_CHUNK_CODEC_ZSTD, Ref<FileAccess>(), vformat("Unsupported GCAS chunk codec in \"%s\".", p_path));
+		c.location.pack_file = 0;
+		c.start = start;
+		start += c.location.size;
+	}
+	LocalVector<String> pack_paths;
+	pack_paths.push_back(p_path);
+	return memnew(FileAccessGCAS(file.path, file.size, file_chunks, pack_paths));
 }
 
 bool PackedSourceGCAS::_parse_index(const String &p_path, const Vector<uint8_t> &p_index, uint64_t p_pack_start, const GCASHeader &p_header, bool p_replace_files) {

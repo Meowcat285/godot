@@ -197,6 +197,19 @@ TEST_CASE("[GCAS] Write and read back files") {
 	CHECK(info.files.size() == 5);
 	CHECK(info.uids.size() == 1);
 
+	// Files can be read from the pack info without mounting the pack (used by the editor's pack explorer).
+	for (uint32_t i = 0; i < info.files.size(); i++) {
+		CHECK_FALSE(info.files[i].external);
+		if (info.files[i].path == "res://gcas_test/sub/compressible.bin") {
+			Ref<FileAccess> unmounted = PackedSourceGCAS::open_pack_info_file(pack_path, info, i);
+			REQUIRE(unmounted.is_valid());
+			Vector<uint8_t> data;
+			data.resize(unmounted->get_length());
+			CHECK(unmounted->get_buffer(data.ptrw(), data.size()) == uint64_t(compressible.size()));
+			CHECK(data == compressible);
+		}
+	}
+
 	REQUIRE(PackedData::get_singleton()->add_pack(pack_path, true, 0) == OK);
 
 	CHECK(read_all("res://gcas_test/hello.txt") == text);
@@ -286,6 +299,23 @@ TEST_CASE("[GCAS] Patch packs reference chunks of their base") {
 	REQUIRE(pf.is_valid());
 	CHECK(pf->get_length() < 1000000);
 	pf.unref();
+
+	// Without mounting, files using base chunks are flagged, and files only using the patch's chunks are readable.
+	PackedSourceGCAS::PackInfo patch_info;
+	REQUIRE(PackedSourceGCAS::read_pack_info(patch_path, patch_info) == OK);
+	for (uint32_t i = 0; i < patch_info.files.size(); i++) {
+		const PackedSourceGCAS::PackInfo::File &f = patch_info.files[i];
+		if (f.path == "res://gcas_patch/big.bin") {
+			CHECK(f.external);
+		} else if (f.path == "res://gcas_patch/added.txt") {
+			CHECK_FALSE(f.external);
+			Ref<FileAccess> fa = PackedSourceGCAS::open_pack_info_file(patch_path, patch_info, i);
+			REQUIRE(fa.is_valid());
+			CHECK(fa->get_as_utf8_string() == String::utf8((const char *)added.ptr(), added.size()));
+		} else {
+			CHECK(f.removed);
+		}
+	}
 
 	// The patch can't be loaded without its base.
 	ERR_PRINT_OFF;
