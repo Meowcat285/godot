@@ -2182,8 +2182,13 @@ void LightStorage::lightmap_set_probe_capture_data(RID p_lightmap, const PackedV
 // - Three slabs of 4 * atlas_bricks.z texels each, holding L1 SH as (L0.rgb, L1y.r), (L1y.gb, L1z.rg), (L1z.b, L1x.rgb).
 //   Bricks are 4x4x4 probes, placed in the atlas in index order (x first). Adjacent bricks repeat their shared probes,
 //   so hardware trilinear filtering inside a brick is seamless.
-// - Then grid_size.z slices of the indirection grid, one texel per cell: (first brick index % 2048, first brick index / 2048,
-//   bricks per axis in this cell, unused). All values are whole numbers, which RGBA16F stores exactly.
+// - Then grid_size.z slices of the indirection grid, one texel per cell: (index % 2048, index / 2048, n, unused).
+//   If n is 1, the cell is one brick and index is that brick. Otherwise the cell is split into n^3 slots, and index is
+//   the first entry of its slot table.
+// - Then the slot tables, filling the rest of the depth, one texel per slot in index order (x first, then y, then z
+//   slices): (brick index % 2048, brick index / 2048, brick size in slots, unused). A brick covers size^3 slots,
+//   starting at the slots whose coordinates are multiples of its size.
+// All values are whole numbers, which RGBA16F stores exactly.
 // p_grid_xform maps lightmap-local space to grid space, where each cell is one unit.
 void LightStorage::lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_t> &p_data, const Vector3i &p_grid_size, const Vector3i &p_atlas_bricks, const Transform3D &p_grid_xform) {
 	Lightmap *lm = lightmap_owner.get_or_null(p_lightmap);
@@ -2205,9 +2210,9 @@ void LightStorage::lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_
 	tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 	tf.width = MAX(p_atlas_bricks.x * 4, p_grid_size.x);
 	tf.height = MAX(p_atlas_bricks.y * 4, p_grid_size.y);
-	tf.depth = p_atlas_bricks.z * 4 * 3 + p_grid_size.z;
+	tf.depth = p_data.size() / (uint64_t(tf.width) * tf.height * 8); // The slot tables take the remaining depth.
 	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
-	ERR_FAIL_COND_MSG(uint64_t(p_data.size()) != uint64_t(tf.width) * tf.height * tf.depth * 8, "Lightmap probe volume data doesn't match its size.");
+	ERR_FAIL_COND_MSG(tf.depth < uint32_t(p_atlas_bricks.z * 4 * 3 + p_grid_size.z) || uint64_t(p_data.size()) != uint64_t(tf.width) * tf.height * tf.depth * 8, "Lightmap probe volume data doesn't match its size.");
 
 	Vector<Vector<uint8_t>> data;
 	data.push_back(p_data);
