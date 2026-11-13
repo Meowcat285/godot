@@ -69,7 +69,7 @@
 		<member name="probe_volume_enabled" type="bool" setter="set_probe_volume_enabled" getter="is_probe_volume_enabled" default="false">
 			If [code]true[/code], bakes an adaptive probe volume in addition to the regular light probes. Dynamic objects inside it sample indirect lighting per pixel with trilinear filtering, instead of receiving one value for the whole object, so large or moving objects get smooth lighting gradients across their surface.
 			Probes are placed in bricks on a grid that is densest near geometry and coarser away from it. Probes that end up inside geometry are replaced by their neighbors, which reduces light leaking.
-			When the [LightmapGI] is selected in the editor, its gizmo shows the volume instead of the regular probes: cell outlines colored by probe density (blue is the coarsest, then green, yellow and red), and each probe colored by the light it captured.
+			When the [LightmapGI] is selected in the editor, its gizmo shows the volume instead of the regular probes: brick outlines colored by probe density (blue is the coarsest, then green, yellow and red), and each probe colored by the light it captured.
 			The volume uses L1 spherical harmonics. When several [LightmapGI]s have a probe volume, only the one closest to the camera is used; objects outside it fall back to the regular light probes. Requires rebaking.
 			[b]Note:[/b] Only supported in the Forward+ and Mobile rendering methods.
 		</member>
@@ -77,7 +77,7 @@
 			The distance between probes near geometry, in meters. Lower values capture finer lighting changes, but increase bake time and memory use quickly. Requires rebaking.
 		</member>
 		<member name="probe_volume_subdivisions" type="int" setter="set_probe_volume_subdivisions" getter="get_probe_volume_subdivisions" default="3">
-			The number of probe density levels. Far from geometry, probes are [code]2^(subdivisions - 1)[/code] times further apart than [member probe_volume_spacing], and density increases one level per grid cell towards geometry. Requires rebaking.
+			The number of probe density levels. Far from geometry, probes are [code]2^(subdivisions - 1)[/code] times further apart than [member probe_volume_spacing]. Bricks near geometry are split in half along each axis, once per level, so only bricks within one [member probe_volume_spacing] of geometry get the densest probes. Requires rebaking.
 		</member>
 		<member name="quality" type="int" setter="set_bake_quality" getter="get_bake_quality" enum="LightmapGI.BakeQuality" default="1">
 			The quality preset to use when baking lightmaps. This affects bake times, but output file sizes remain mostly identical across quality levels.

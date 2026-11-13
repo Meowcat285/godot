@@ -73,14 +73,14 @@ int LightmapGIGizmoPlugin::get_priority() const {
 	return -1;
 }
 
-// Draws the adaptive probe volume: cell outlines colored by density (blue: 1 brick per axis, green: 2, yellow: 4,
+// Draws the adaptive probe volume: brick outlines colored by density (blue: 1 brick per cell axis, green: 2, yellow: 4,
 // red: 8) and each probe as a small sphere shaded by its irradiance. Returns false if there is no volume.
 static bool _draw_lightmap_probe_volume(EditorNode3DGizmo *p_gizmo, const Ref<LightmapGIData> &p_data, float p_probe_size, const Ref<Material> &p_lines_material, const Ref<Material> &p_probe_material) {
 	LocalVector<Vector3> positions;
 	LocalVector<Color> sh;
 	LocalVector<float> spacing;
 	LocalVector<LightmapProbeVolumeBuilder::DebugCell> cells;
-	// Drawing millions of probes would stall the editor; the cell outlines still show the layout.
+	// Drawing millions of probes would stall the editor; the brick outlines still show the layout.
 	constexpr int MAX_DRAWN_PROBES = 50000;
 	const Dictionary volume = p_data->_get_probe_volume_data();
 	const bool draw_probes = int(volume.get("probe_count", 0)) <= MAX_DRAWN_PROBES && !Math::is_zero_approx(p_probe_size);
