@@ -40,7 +40,6 @@
 #include "core/io/file_access_pack.h" // PACK_HEADER_MAGIC, PACK_FORMAT_VERSION
 #include "core/io/image.h"
 #include "core/io/image_loader.h"
-#include "core/io/resource_importer.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/io/resource_uid.h"
@@ -1484,9 +1483,7 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 		Ref<ConfigFile> config;
 		if (has_import_file) {
 			config.instantiate();
-			// Opened through the importer, which adds the import results when they are kept by an artifact store.
-			Ref<FileAccess> import_file = ResourceFormatImporter::open_import_file(path, &err);
-			err = import_file.is_valid() ? config->parse(import_file->get_as_text()) : ERR_FILE_CANT_OPEN;
+			err = config->load(path + ".import");
 			if (err != OK) {
 				ERR_PRINT("Could not parse: '" + path + "', not exported.");
 				continue;
@@ -1625,13 +1622,13 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 					String remap = F;
 					if (remap == "path") {
 						save_info.path = config->get_value("remap", remap);
-						err = save_proxy.save_file(p_preset, p_udata, save_info, FileAccess::get_file_as_bytes(ResourceFormatImporter::resolve_artifact_path(save_info.path)));
+						err = save_proxy.save_file(p_preset, p_udata, save_info, FileAccess::get_file_as_bytes(save_info.path));
 					} else if (remap.begins_with("path.")) {
 						String feature = remap.get_slicec('.', 1);
 
 						if (remap_features.has(feature)) {
 							save_info.path = config->get_value("remap", remap);
-							err = save_proxy.save_file(p_preset, p_udata, save_info, FileAccess::get_file_as_bytes(ResourceFormatImporter::resolve_artifact_path(save_info.path)));
+							err = save_proxy.save_file(p_preset, p_udata, save_info, FileAccess::get_file_as_bytes(save_info.path));
 						} else {
 							// Remove paths if feature not enabled.
 							config->erase_section_key("remap", remap);

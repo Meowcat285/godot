@@ -528,7 +528,6 @@
 
 /core/crypto/cas_hash.*                       @Meowcat285
 /core/io/file_access_gcas.*                   @Meowcat285
-/editor/file_system/editor_import_artifact_store.h @Meowcat285
 /modules/cas/                                 @Meowcat285
 /modules/cas/**/*.py                          @Meowcat285 @godotengine/buildsystem
 /modules/cas/**/SCsub                         @Meowcat285 @godotengine/buildsystem
