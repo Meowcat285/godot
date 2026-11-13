@@ -123,6 +123,55 @@ ATMOSPHERE_PROPERTY(float, multi_scattering_factor, MAX(p_value, 0.0f))
 
 #undef ATMOSPHERE_PROPERTY
 
+#define CLOUDS_PROPERTY(m_type, m_name, m_value) \
+	void AtmosphereSkyMaterial::set_##m_name(m_type p_value) { \
+		m_name = m_value; \
+		_update_clouds_params(); \
+	} \
+	decltype(AtmosphereSkyMaterial::m_name) AtmosphereSkyMaterial::get_##m_name() const { \
+		return m_name; \
+	}
+
+CLOUDS_PROPERTY(bool, clouds_enabled, p_value)
+CLOUDS_PROPERTY(float, clouds_coverage, CLAMP(p_value, 0.0f, 1.0f))
+CLOUDS_PROPERTY(float, clouds_type, CLAMP(p_value, 0.0f, 1.0f))
+CLOUDS_PROPERTY(float, clouds_density, MAX(p_value, 0.0f))
+CLOUDS_PROPERTY(float, clouds_bottom_altitude, MAX(p_value, 0.0f))
+CLOUDS_PROPERTY(float, clouds_thickness, MAX(p_value, 0.01f))
+CLOUDS_PROPERTY(float, clouds_shape_scale, MAX(p_value, 0.01f))
+CLOUDS_PROPERTY(float, clouds_detail_scale, MAX(p_value, 0.001f))
+CLOUDS_PROPERTY(float, clouds_detail_strength, CLAMP(p_value, 0.0f, 1.0f))
+CLOUDS_PROPERTY(float, clouds_weather_scale, MAX(p_value, 0.01f))
+CLOUDS_PROPERTY(const Color &, clouds_albedo, p_value)
+CLOUDS_PROPERTY(float, clouds_wind_direction, p_value)
+CLOUDS_PROPERTY(float, clouds_wind_speed, MAX(p_value, 0.0f))
+CLOUDS_PROPERTY(AtmosphereSkyMaterial::CloudsQuality, clouds_quality, p_value)
+CLOUDS_PROPERTY(const Ref<Texture2D> &, clouds_weather_map, p_value)
+
+#undef CLOUDS_PROPERTY
+
+void AtmosphereSkyMaterial::_update_clouds_params() {
+	RS *rs = RS::get_singleton();
+	const RID rid = _get_material();
+	// The sky shader doesn't use these: the renderer reads them to draw the clouds.
+	rs->material_set_param(rid, "clouds_enabled", clouds_enabled);
+	rs->material_set_param(rid, "clouds_coverage", clouds_coverage);
+	rs->material_set_param(rid, "clouds_type", clouds_type);
+	rs->material_set_param(rid, "clouds_density", clouds_density);
+	rs->material_set_param(rid, "clouds_bottom_altitude", clouds_bottom_altitude);
+	rs->material_set_param(rid, "clouds_thickness", clouds_thickness);
+	rs->material_set_param(rid, "clouds_shape_scale", clouds_shape_scale);
+	rs->material_set_param(rid, "clouds_detail_scale", clouds_detail_scale);
+	rs->material_set_param(rid, "clouds_detail_strength", clouds_detail_strength);
+	rs->material_set_param(rid, "clouds_weather_scale", clouds_weather_scale);
+	rs->material_set_param(rid, "clouds_albedo", color_to_vec3(clouds_albedo));
+	const float wind_angle = Math::deg_to_rad(clouds_wind_direction);
+	rs->material_set_param(rid, "clouds_wind_velocity", Vector2(Math::sin(wind_angle), -Math::cos(wind_angle)) * clouds_wind_speed * 0.001f);
+	rs->material_set_param(rid, "clouds_quality", int(clouds_quality));
+	rs->material_set_param(rid, "clouds_weather_map", clouds_weather_map.is_valid() ? Variant(clouds_weather_map->get_rid()) : Variant());
+	rs->material_set_param(rid, "use_camera_altitude", use_camera_altitude);
+}
+
 // These don't affect the lookup tables.
 void AtmosphereSkyMaterial::set_observer_altitude(float p_altitude) {
 	observer_altitude = p_altitude;
@@ -144,6 +193,7 @@ float AtmosphereSkyMaterial::get_energy_multiplier() const {
 
 void AtmosphereSkyMaterial::set_use_camera_altitude(bool p_enable) {
 	use_camera_altitude = p_enable;
+	_update_clouds_params();
 	_update_shader_variant();
 }
 
@@ -697,6 +747,22 @@ void AtmosphereSkyMaterial::_bind_methods() {
 	BIND_ATMOSPHERE_PROPERTY(use_debanding, "use_debanding");
 	BIND_ATMOSPHERE_PROPERTY(night_sky, "night_sky");
 
+	BIND_ATMOSPHERE_PROPERTY(clouds_enabled, "enabled");
+	BIND_ATMOSPHERE_PROPERTY(clouds_coverage, "coverage");
+	BIND_ATMOSPHERE_PROPERTY(clouds_type, "type");
+	BIND_ATMOSPHERE_PROPERTY(clouds_density, "density");
+	BIND_ATMOSPHERE_PROPERTY(clouds_bottom_altitude, "altitude");
+	BIND_ATMOSPHERE_PROPERTY(clouds_thickness, "thickness");
+	BIND_ATMOSPHERE_PROPERTY(clouds_shape_scale, "scale");
+	BIND_ATMOSPHERE_PROPERTY(clouds_detail_scale, "scale");
+	BIND_ATMOSPHERE_PROPERTY(clouds_detail_strength, "strength");
+	BIND_ATMOSPHERE_PROPERTY(clouds_weather_scale, "scale");
+	BIND_ATMOSPHERE_PROPERTY(clouds_albedo, "albedo");
+	BIND_ATMOSPHERE_PROPERTY(clouds_wind_direction, "degrees");
+	BIND_ATMOSPHERE_PROPERTY(clouds_wind_speed, "speed");
+	BIND_ATMOSPHERE_PROPERTY(clouds_quality, "quality");
+	BIND_ATMOSPHERE_PROPERTY(clouds_weather_map, "weather_map");
+
 #undef BIND_ATMOSPHERE_PROPERTY
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "energy_multiplier", PROPERTY_HINT_RANGE, "0,128,0.01"), "set_energy_multiplier", "get_energy_multiplier");
@@ -731,6 +797,27 @@ void AtmosphereSkyMaterial::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ozone_absorption_scale", PROPERTY_HINT_RANGE, "0,0.1,0.0001,or_greater,suffix:1/km"), "set_ozone_absorption_scale", "get_ozone_absorption_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ozone_altitude", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater,suffix:km"), "set_ozone_altitude", "get_ozone_altitude");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ozone_width", PROPERTY_HINT_RANGE, "0.01,100,0.1,or_greater,suffix:km"), "set_ozone_width", "get_ozone_width");
+
+	ADD_GROUP("Clouds", "clouds_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "clouds_enabled"), "set_clouds_enabled", "get_clouds_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_coverage", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_clouds_coverage", "get_clouds_coverage");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_type", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_clouds_type", "get_clouds_type");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_density", PROPERTY_HINT_RANGE, "0,200,0.1,or_greater,suffix:1/km"), "set_clouds_density", "get_clouds_density");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_bottom_altitude", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:km"), "set_clouds_bottom_altitude", "get_clouds_bottom_altitude");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_thickness", PROPERTY_HINT_RANGE, "0.01,20,0.01,or_greater,suffix:km"), "set_clouds_thickness", "get_clouds_thickness");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_shape_scale", PROPERTY_HINT_RANGE, "0.1,100,0.1,or_greater,suffix:km"), "set_clouds_shape_scale", "get_clouds_shape_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_detail_scale", PROPERTY_HINT_RANGE, "0.01,10,0.01,or_greater,suffix:km"), "set_clouds_detail_scale", "get_clouds_detail_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_detail_strength", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_clouds_detail_strength", "get_clouds_detail_strength");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_weather_scale", PROPERTY_HINT_RANGE, "1,500,0.1,or_greater,suffix:km"), "set_clouds_weather_scale", "get_clouds_weather_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "clouds_weather_map", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_clouds_weather_map", "get_clouds_weather_map");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "clouds_albedo", PROPERTY_HINT_COLOR_NO_ALPHA), "set_clouds_albedo", "get_clouds_albedo");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_wind_direction", PROPERTY_HINT_RANGE, "0,360,0.1,degrees"), "set_clouds_wind_direction", "get_clouds_wind_direction");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clouds_wind_speed", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater,suffix:m/s"), "set_clouds_wind_speed", "get_clouds_wind_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "clouds_quality", PROPERTY_HINT_ENUM, "Low,Medium,High"), "set_clouds_quality", "get_clouds_quality");
+
+	BIND_ENUM_CONSTANT(CLOUDS_QUALITY_LOW);
+	BIND_ENUM_CONSTANT(CLOUDS_QUALITY_MEDIUM);
+	BIND_ENUM_CONSTANT(CLOUDS_QUALITY_HIGH);
 }
 
 AtmosphereSkyMaterial::AtmosphereSkyMaterial() {
@@ -739,4 +826,5 @@ AtmosphereSkyMaterial::AtmosphereSkyMaterial() {
 	RS::get_singleton()->material_set_param(_get_material(), "illuminance_scale", physical_light_units ? 1.0f : float(Math::PI));
 	// The lookup tables are baked when the renderer first requests the material.
 	_update_params();
+	_update_clouds_params();
 }

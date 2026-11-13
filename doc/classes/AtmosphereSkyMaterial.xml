@@ -16,6 +16,52 @@
 		<member name="atmosphere_height" type="float" setter="set_atmosphere_height" getter="get_atmosphere_height" default="100.0">
 			Thickness of the atmosphere above the ground, in kilometers.
 		</member>
+		<member name="clouds_albedo" type="Color" setter="set_clouds_albedo" getter="get_clouds_albedo" default="Color(1, 1, 1, 1)">
+			Color of the light the clouds scatter. White is physically plausible; tint it for stylized skies.
+		</member>
+		<member name="clouds_bottom_altitude" type="float" setter="set_clouds_bottom_altitude" getter="get_clouds_bottom_altitude" default="1.5">
+			Altitude of the bottom of the cloud layer, in kilometers.
+		</member>
+		<member name="clouds_coverage" type="float" setter="set_clouds_coverage" getter="get_clouds_coverage" default="0.5">
+			Fraction of the sky covered by clouds, from [code]0.0[/code] (clear) to [code]1.0[/code] (overcast). Ignored when [member clouds_weather_map] is set.
+		</member>
+		<member name="clouds_density" type="float" setter="set_clouds_density" getter="get_clouds_density" default="20.0">
+			Extinction inside a cloud, per kilometer. Higher values give denser, darker clouds with sharper edges.
+		</member>
+		<member name="clouds_detail_scale" type="float" setter="set_clouds_detail_scale" getter="get_clouds_detail_scale" default="0.6">
+			Size of the detail noise that erodes cloud edges, in kilometers.
+		</member>
+		<member name="clouds_detail_strength" type="float" setter="set_clouds_detail_strength" getter="get_clouds_detail_strength" default="0.35">
+			How strongly the detail noise erodes cloud edges. [code]0.0[/code] gives smooth, blobby clouds.
+		</member>
+		<member name="clouds_enabled" type="bool" setter="set_clouds_enabled" getter="get_clouds_enabled" default="false">
+			If [code]true[/code], volumetric clouds are rendered. They are raymarched at half resolution before the transparent pass, blended over opaque geometry with a depth test, and lit by the first directional light and the sky. Supported in the Forward+ and Mobile renderers, and only when this material is the [Environment]'s background sky.
+			[b]Note:[/b] Clouds don't appear in reflections or the sky's ambient light, and aren't affected by [Environment] fog.
+		</member>
+		<member name="clouds_quality" type="int" setter="set_clouds_quality" getter="get_clouds_quality" enum="AtmosphereSkyMaterial.CloudsQuality" default="1">
+			Number of raymarching steps, trading speed for detail. See [enum CloudsQuality].
+		</member>
+		<member name="clouds_shape_scale" type="float" setter="set_clouds_shape_scale" getter="get_clouds_shape_scale" default="6.0">
+			Size of the base cloud shape noise, in kilometers. Larger values give larger clouds.
+		</member>
+		<member name="clouds_thickness" type="float" setter="set_clouds_thickness" getter="get_clouds_thickness" default="3.0">
+			Thickness of the cloud layer, in kilometers.
+		</member>
+		<member name="clouds_type" type="float" setter="set_clouds_type" getter="get_clouds_type" default="0.5">
+			Cloud type from [code]0.0[/code] (flat stratus) to [code]1.0[/code] (tall cumulus). Ignored when [member clouds_weather_map] is set.
+		</member>
+		<member name="clouds_weather_map" type="Texture2D" setter="set_clouds_weather_map" getter="get_clouds_weather_map">
+			Optional texture that controls where clouds form. The red channel is coverage and the green channel is cloud type, both from [code]0.0[/code] to [code]1.0[/code]. It tiles every [member clouds_weather_scale] kilometers. If unset, a built-in noise map is used with [member clouds_coverage] and [member clouds_type].
+		</member>
+		<member name="clouds_weather_scale" type="float" setter="set_clouds_weather_scale" getter="get_clouds_weather_scale" default="30.0">
+			Distance in kilometers over which the weather map tiles.
+		</member>
+		<member name="clouds_wind_direction" type="float" setter="set_clouds_wind_direction" getter="get_clouds_wind_direction" default="0.0">
+			Direction the clouds move towards, in degrees. [code]0.0[/code] moves them towards -Z (forward), [code]90.0[/code] towards +X.
+		</member>
+		<member name="clouds_wind_speed" type="float" setter="set_clouds_wind_speed" getter="get_clouds_wind_speed" default="0.0">
+			Speed of the clouds, in meters per second. [code]0.0[/code] keeps them still.
+		</member>
 		<member name="energy_multiplier" type="float" setter="set_energy_multiplier" getter="get_energy_multiplier" default="1.0">
 			Multiplier for the sky's luminance, including the light disks. Does not change how the lights illuminate the scene.
 		</member>
@@ -80,4 +126,15 @@
 			If [code]true[/code], enables debanding. Debanding adds a small amount of noise which helps reduce banding that appears from the smooth changes in color in the sky.
 		</member>
 	</members>
+	<constants>
+		<constant name="CLOUDS_QUALITY_LOW" value="0" enum="CloudsQuality">
+			32 raymarching steps and 4 light steps. Recommended for the Mobile renderer.
+		</constant>
+		<constant name="CLOUDS_QUALITY_MEDIUM" value="1" enum="CloudsQuality">
+			64 raymarching steps and 6 light steps.
+		</constant>
+		<constant name="CLOUDS_QUALITY_HIGH" value="2" enum="CloudsQuality">
+			128 raymarching steps and 8 light steps.
+		</constant>
+	</constants>
 </class>

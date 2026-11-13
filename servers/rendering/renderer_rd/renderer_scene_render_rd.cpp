@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/io/image.h"
+#include "servers/rendering/renderer_rd/effects/atmosphere_clouds.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl.gen.h"
@@ -257,6 +258,10 @@ Ref<RenderSceneBuffers> RendererSceneRenderRD::render_buffers_create() {
 bool RendererSceneRenderRD::_compositor_effects_has_flag(const RenderDataRD *p_render_data, RSE::CompositorEffectFlags p_flag, RSE::CompositorEffectCallbackType p_callback_type) {
 	RendererCompositorStorage *comp_storage = RendererCompositorStorage::get_singleton();
 
+	if (RendererRD::AtmosphereClouds::has_flag(p_render_data, sky, p_flag, p_callback_type)) {
+		return true;
+	}
+
 	if (p_render_data->compositor.is_null()) {
 		return false;
 	}
@@ -280,6 +285,10 @@ bool RendererSceneRenderRD::_compositor_effects_has_flag(const RenderDataRD *p_r
 bool RendererSceneRenderRD::_has_compositor_effect(RSE::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data) {
 	RendererCompositorStorage *comp_storage = RendererCompositorStorage::get_singleton();
 
+	if (RendererRD::AtmosphereClouds::uses_callback(p_render_data, sky, p_callback_type)) {
+		return true;
+	}
+
 	if (p_render_data->compositor.is_null()) {
 		return false;
 	}
@@ -297,6 +306,8 @@ bool RendererSceneRenderRD::_has_compositor_effect(RSE::CompositorEffectCallback
 
 void RendererSceneRenderRD::_process_compositor_effects(RSE::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data) {
 	RendererCompositorStorage *comp_storage = RendererCompositorStorage::get_singleton();
+
+	RendererRD::AtmosphereClouds::process(p_render_data, sky, p_callback_type);
 
 	if (p_render_data->compositor.is_null()) {
 		return;
@@ -1908,6 +1919,7 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 #endif
 
 	memdelete(resolve_effects);
+	RendererRD::AtmosphereClouds::free_singleton();
 
 	if (sky.sky_scene_state.uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(sky.sky_scene_state.uniform_set)) {
 		RD::get_singleton()->free_rid(sky.sky_scene_state.uniform_set);
