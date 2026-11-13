@@ -30,19 +30,11 @@
 
 #include "cas_editor_plugin.h"
 
-#include "cas_import_store.h"
 #include "gcas_pack_explorer.h"
 
 #include "core/object/callable_mp.h"
 #include "editor/editor_interface.h"
-#include "editor/gui/editor_toaster.h"
-#include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
-
-void CASEditorPlugin::_clean_import_cache() {
-	CASImportStore::get_singleton()->collect_garbage(0);
-	EditorToaster::get_singleton()->popup_str(TTR("Removed imported files that aren't used by the current imports."));
-}
 
 void CASEditorPlugin::_explore_pack() {
 	if (!pack_explorer) {
@@ -52,28 +44,6 @@ void CASEditorPlugin::_explore_pack() {
 	pack_explorer->popup_centered_clamped(Size2(800, 600) * EDSCALE, 0.8);
 }
 
-void CASEditorPlugin::_settings_changed() {
-	if (EditorSettings::get_singleton()->check_changed_settings_in_group("editor/import/cas")) {
-		CASImportStore::get_singleton()->update_backends_from_settings();
-	}
-}
-
 CASEditorPlugin::CASEditorPlugin() {
-	EDITOR_DEF("editor/import/cas/max_cache_size_mb", 10240);
-	EditorSettings::get_singleton()->add_property_hint(PropertyInfo(Variant::INT, "editor/import/cas/max_cache_size_mb", PROPERTY_HINT_RANGE, "0,1048576,1,or_greater,suffix:MiB"));
-	EDITOR_DEF("editor/import/cas/shared_cache_directory", "");
-	EditorSettings::get_singleton()->add_property_hint(PropertyInfo(Variant::STRING, "editor/import/cas/shared_cache_directory", PROPERTY_HINT_GLOBAL_DIR));
-	EDITOR_DEF("editor/import/cas/shared_cache_read_only", false);
-
-	CASImportStore::get_singleton()->update_backends_from_settings();
-	EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &CASEditorPlugin::_settings_changed));
-
-	// Keep the import cache within its budget (imported files used by the project are always kept).
-	int max_size_mb = EDITOR_GET("editor/import/cas/max_cache_size_mb");
-	if (max_size_mb > 0) {
-		CASImportStore::get_singleton()->collect_garbage(uint64_t(max_size_mb) * 1024 * 1024);
-	}
-
-	add_tool_menu_item(TTR("Clean Import Cache"), callable_mp(this, &CASEditorPlugin::_clean_import_cache));
 	add_tool_menu_item(TTR("Explore GCAS Pack..."), callable_mp(this, &CASEditorPlugin::_explore_pack));
 }

@@ -4371,7 +4371,6 @@ void EditorNode::_discard_changes(const String &p_str) {
 		case TOOLS_CLEAR_PROJECT_CACHE: {
 			files_to_delete_on_exit = LocalVector<String>{
 				"res://.godot/imported",
-				"res://.godot/cas",
 				"res://.godot/exported",
 				"res://.godot/mono",
 				"res://.godot/extension_list.cfg",

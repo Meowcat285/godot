@@ -39,9 +39,7 @@ class CASEditorPlugin : public EditorPlugin {
 
 	GCASPackExplorer *pack_explorer = nullptr;
 
-	void _clean_import_cache();
 	void _explore_pack();
-	void _settings_changed();
 
 public:
 	virtual String get_plugin_name() const override { return "CAS"; }

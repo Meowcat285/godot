@@ -38,13 +38,9 @@
 #include "core/object/class_db.h"
 
 #ifdef TOOLS_ENABLED
-#include "editor/cas_backend.h"
 #include "editor/cas_editor_plugin.h"
-#include "editor/cas_import_store.h"
 #include "editor/gcas_export.h"
 #include "editor/plugins/editor_plugin.h"
-
-static CASImportStore *import_store = nullptr;
 #endif
 
 void initialize_cas_module(ModuleInitializationLevel p_level) {
@@ -60,14 +56,6 @@ void initialize_cas_module(ModuleInitializationLevel p_level) {
 		GLOBAL_DEF(PropertyInfo(Variant::INT, "editor/export/gcas/compression_level", PROPERTY_HINT_RANGE, "1,22,1"), 19);
 		EditorExportPlatform::save_gcas_function = GCASExport::save_gcas;
 
-		GDREGISTER_CLASS(CASBackend);
-		GDREGISTER_CLASS(CASLocalDirectoryBackend);
-
-		// Also used when running the project from the editor, to find imported files.
-		import_store = memnew(CASImportStore);
-		ResourceFormatImporter::artifact_provider = import_store;
-		EditorImportArtifactStore::set_singleton(import_store);
-
 		EditorPlugins::add_by_type<CASEditorPlugin>();
 	}
 #endif
@@ -77,12 +65,6 @@ void uninitialize_cas_module(ModuleInitializationLevel p_level) {
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
 		EditorExportPlatform::save_gcas_function = nullptr;
-		if (import_store) {
-			ResourceFormatImporter::artifact_provider = nullptr;
-			EditorImportArtifactStore::set_singleton(nullptr);
-			memdelete(import_store);
-			import_store = nullptr;
-		}
 	}
 #endif
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
