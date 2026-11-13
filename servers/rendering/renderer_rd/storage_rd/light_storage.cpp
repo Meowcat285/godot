@@ -2210,6 +2210,7 @@ void LightStorage::lightmap_set_probe_volume(RID p_lightmap, const Vector<uint8_
 	tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 	tf.width = MAX(p_atlas_bricks.x * 4, p_grid_size.x);
 	tf.height = MAX(p_atlas_bricks.y * 4, p_grid_size.y);
+	ERR_FAIL_COND_MSG(tf.width == 0 || tf.height == 0, "Lightmap probe volume grid and atlas sizes must not be zero.");
 	tf.depth = p_data.size() / (uint64_t(tf.width) * tf.height * 8); // The slot tables take the remaining depth.
 	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
 	ERR_FAIL_COND_MSG(tf.depth < uint32_t(p_atlas_bricks.z * 4 * 3 + p_grid_size.z) || uint64_t(p_data.size()) != uint64_t(tf.width) * tf.height * tf.depth * 8, "Lightmap probe volume data doesn't match its size.");
