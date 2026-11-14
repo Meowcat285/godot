@@ -1373,7 +1373,7 @@ Error ImporterMesh::lightmap_unwrap_cached(const Transform3D &p_base_transform, 
 			normals[(j + vertex_ofs) * 3 + 0] = n.x;
 			normals[(j + vertex_ofs) * 3 + 1] = n.y;
 			normals[(j + vertex_ofs) * 3 + 2] = n.z;
-			uv_indices[j + vertex_ofs] = Pair<int, int>(i, j);
+			uv_indices[j + vertex_ofs] = Pair<int, int>((int)lightmap_surfaces.size(), j);
 		}
 
 		PackedInt32Array rindices = arrays[Mesh::ARRAY_INDEX];
