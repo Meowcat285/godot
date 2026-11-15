@@ -1,5 +1,6 @@
 default_language_version:
   python: python3
+  node: lts
 
 exclude: |
   (?x)^(
@@ -140,7 +141,7 @@ repos:
           - --config
           - platform/web/eslint.config.cjs
         additional_dependencies:
-          - "@eslint/js@^9.12.0"
+          - "@eslint/js@^9.39.5"
           - "@html-eslint/eslint-plugin@^0.27.0"
           - "@html-eslint/parser@^0.27.0"
           - "@stylistic/eslint-plugin@^2.13.0"
