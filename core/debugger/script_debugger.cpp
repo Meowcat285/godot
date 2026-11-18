@@ -104,8 +104,4 @@ Vector<ScriptLanguage::StackInfo> ScriptDebugger::get_error_stack_info() const {
 	return error_stack_info;
 }
 
-ScriptLanguage *ScriptDebugger::get_break_language() const {
-	return break_lang;
-}
-
 #endif // DEBUG_ENABLED
