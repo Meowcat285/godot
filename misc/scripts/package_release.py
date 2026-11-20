@@ -128,9 +128,9 @@ class Packager:
         binaries = {}
         for target in ["release", "debug"]:
             suffix = "" if target == "release" else "-debug"
-            src = self.artifact_file(f"macos-template-mono{suffix}", f"godot.macos.template_{target}.universal.mono")
+            src = self.artifact_file(f"macos-template-mono{suffix}", f"godot.macos.template_{target}.arm64.mono")
             if src is not None:
-                binaries[f"godot_macos_{target}.universal"] = src
+                binaries[f"godot_macos_{target}.arm64"] = src
         if not binaries:
             return None
 
@@ -237,7 +237,7 @@ class Packager:
         return out
 
     def build_macos_editor_app(self, app_dir: Path) -> bool:
-        binary = self.artifact_file("macos-editor-mono", "godot.macos.editor.universal.mono")
+        binary = self.artifact_file("macos-editor-mono", "godot.macos.editor.arm64.mono")
         if binary is None:
             return False
 
@@ -266,7 +266,7 @@ class Packager:
         return True
 
     def package_macos_editor(self) -> Path | None:
-        out = self.output / f"{self.base_name}_macos.universal.zip"
+        out = self.output / f"{self.base_name}_macos.arm64.zip"
 
         # Signed and notarized app, zipped by `.github/workflows/macos_sign.yml` with `ditto` so the signature
         # and stapled ticket are kept as is. Only present when the signing secrets are set up.

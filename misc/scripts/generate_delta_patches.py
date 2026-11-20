@@ -46,7 +46,9 @@ MANIFEST_FORMAT = 1
 PACKAGES = {
     "editor-linux-x86_64": "_linux_x86_64.zip",
     "editor-windows-x86_64": "_win64.zip",
-    "editor-macos-universal": "_macos.universal.zip",
+    # The id predates arm64-only builds and is kept so existing launcher installs keep working. Universal-era
+    # releases have no `_macos.arm64.zip`, so they get no macOS delta (a one-time full download).
+    "editor-macos-universal": "_macos.arm64.zip",
     "export-templates": "_export_templates.tpz",
 }
 
