@@ -12,7 +12,7 @@ merged into `slop` early. Each was merged as-is (no fork-side edits) with a
 | [#108586](https://github.com/godotengine/godot/pull/108586) | Close scene tab when file is removed | `61fa347213872befcdad572d203489aeab81d458` | 2026-10-29 |
 | [#122337](https://github.com/godotengine/godot/pull/122337) | Exclude `EngineDebugger` and related code from release builds | `625b5c9193d2e760c7ca66951cb13dd3b486e52e` | 2026-10-29 |
 | [#111541](https://github.com/godotengine/godot/pull/111541) | Add missing `NodePath.Slice()` method to the C# API | `336edf370faf8c734bc35956c00460e528844bd9` | 2026-11-01 |
-| [#117613](https://github.com/godotengine/godot/pull/117613) | Add option to create new material from shader | `c94e44f82cd6a831f0d231b4ebca903b3ede009d` | 2026-10-29 |
+| [#117613](https://github.com/godotengine/godot/pull/117613) | Add option to create new material from shader | `445b85a69c91880cb399b9ddb4949cb54cb6e12c` | 2026-11-27 |
 | [#118532](https://github.com/godotengine/godot/pull/118532) | Make Camera3D inspector preview match viewport project settings | `f7f8061a733df9385890fe20b5c573d661a12d18` | 2026-10-29 |
 | [#116392](https://github.com/godotengine/godot/pull/116392) | Add curve auto-tangent button for Path2D and Path3D | `ed8fb928f2f7ed2f39c642cc120b58cb7d649fc3` | 2026-10-29 |
 | [#106794](https://github.com/godotengine/godot/pull/106794) | Add multi-node 3D collision based snapping | `244d8b40a7bb3595c902068df9b38cd07d07af30` | 2026-10-29 |
