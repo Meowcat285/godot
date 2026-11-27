@@ -642,7 +642,7 @@ namespace GodotTools
             _inspectorPluginWeak = WeakRef(inspectorPlugin);
 
             // TranslationParser Plugin
-            AddTranslationParserPlugin(new CsTranslationParserPlugin());
+            Internal.EditorTranslationParserAddParser(new CsTranslationParserPlugin());
 
             BuildManager.Initialize();
 
