@@ -415,9 +415,12 @@ void EditorResourcePicker::_update_menu_items() {
 	if (is_editable() && edited_resource.is_valid()) {
 		Vector<Ref<EditorResourceConversionPlugin>> conversions = EditorNode::get_singleton()->find_resource_conversion_plugin_for_resource(edited_resource);
 		bool separator_added = false;
-		for (int i = 0; i < conversions.size(); i++) {
-			if (!conversions[i]->replaces_source()) {
+		int relative_id = 0;
+		for (const Ref<EditorResourceConversionPlugin> &conversion : conversions) {
+			if (!conversion->replaces_source()) {
 				// Conversions that create a new resource can't replace the edited one.
+				// Still increment the ID to keep it aligned with the index in `conversions`.
+				relative_id++;
 				continue;
 			}
 			if (!separator_added) {
@@ -425,7 +428,7 @@ void EditorResourcePicker::_update_menu_items() {
 				separator_added = true;
 			}
 
-			String what = conversions[i]->converts_to();
+			String what = conversion->converts_to();
 			Ref<Texture2D> icon;
 			if (has_theme_icon(what, EditorStringName(EditorIcons))) {
 				icon = get_editor_theme_icon(what);
@@ -433,7 +436,8 @@ void EditorResourcePicker::_update_menu_items() {
 				icon = get_editor_theme_icon(SNAME("Object"));
 			}
 
-			edit_menu->add_icon_item(icon, vformat(TTR("Convert to %s"), what), CONVERT_BASE_ID + i);
+			edit_menu->add_icon_item(icon, vformat(TTR("Convert to %s"), what), CONVERT_BASE_ID + relative_id);
+			relative_id++;
 		}
 	}
 }

@@ -5,6 +5,7 @@
 	</brief_description>
 	<description>
 		[EditorResourceConversionPlugin] is invoked when the context menu is brought up for a resource in the editor inspector. Relevant conversion plugins will appear as menu options to convert the given resource to a target type.
+		If [method _replaces_source] returns [code]false[/code], the plugin appears in the [b]Create New[/b] submenu of the FileSystem dock's context menu instead. The editor then saves the converted resource as a new file and keeps the source file unchanged.
 		Below shows an example of a basic plugin that will convert an [ImageTexture] to a [PortableCompressedTexture2D].
 		[codeblocks]
 		[gdscript]
@@ -51,7 +52,7 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if the [Resource] returned by [method _convert] should replace the source [Resource]. This is the default.
-				If [code]false[/code], the source [Resource] is kept and the converted [Resource] is saved as a new file instead. Such conversions are only available in the [b]Create New[/b] submenu of the FileSystem dock; for example, creating a [ShaderMaterial] from a [Shader].
+				If [code]false[/code], the editor keeps the source [Resource] and saves the converted [Resource] as a new file instead. Such conversions are only available in the [b]Create New[/b] submenu of the FileSystem dock; for example, creating a [ShaderMaterial] from a [Shader].
 			</description>
 		</method>
 	</methods>
