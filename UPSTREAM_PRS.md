@@ -18,6 +18,7 @@ merged into `slop` early. Each was merged as-is (no fork-side edits) with a
 | [#106794](https://github.com/godotengine/godot/pull/106794) | Add multi-node 3D collision based snapping | `244d8b40a7bb3595c902068df9b38cd07d07af30` | 2026-10-29 |
 | [#124989](https://github.com/godotengine/godot/pull/124989) | Don't print remapped path if it's the same | `a1e09059ebe321db5533029337d631a13ca3fd71` | 2026-11-05 |
 | [#123078](https://github.com/godotengine/godot/pull/123078) | Add texel density preview view | `4df40671ef84ab57efd8f28aadaba6c9c80b4e42` | 2026-11-10 |
+| [#125831](https://github.com/godotengine/godot/pull/125831) | [Windows] Fix `screen_set_keep_on`. | `ba52842d98c70427ae90a6ce005f1c1be28b7e4d` | 2026-11-28 |
 
 ## Re-syncing
 
