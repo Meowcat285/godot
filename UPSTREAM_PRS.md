@@ -18,6 +18,7 @@ merged into `slop` early. Each was merged as-is (no fork-side edits) with a
 | [#106794](https://github.com/godotengine/godot/pull/106794) | Add multi-node 3D collision based snapping | `244d8b40a7bb3595c902068df9b38cd07d07af30` | 2026-10-29 |
 | [#124989](https://github.com/godotengine/godot/pull/124989) | Don't print remapped path if it's the same | `a1e09059ebe321db5533029337d631a13ca3fd71` | 2026-11-05 |
 | [#123078](https://github.com/godotengine/godot/pull/123078) | Add texel density preview view | `4df40671ef84ab57efd8f28aadaba6c9c80b4e42` | 2026-11-10 |
+| [#125826](https://github.com/godotengine/godot/pull/125826) | Clamp roughness before GGX functions to avoid NaNs caused by denormals | `d078b6e5cb529ae14cec4fd72788c7a2a2236073` | 2026-11-28 |
 
 ## Re-syncing
 
